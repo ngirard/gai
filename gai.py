@@ -127,7 +127,7 @@ CONFIG_TYPES: Dict[str, type] = {
 }
 
 # Configuration file path
-CONFIG_FILE_DIR = pathlib.Path.home() / ".config" / "genai_cli"
+CONFIG_FILE_DIR = pathlib.Path.home() / ".config" / "gai"
 CONFIG_FILE_PATH = CONFIG_FILE_DIR / "config.toml"
 
 # --- Configuration Generation ---
@@ -161,8 +161,8 @@ def format_toml_value_line(name: str, value: Any) -> str:
 def generate_default_config_toml():
     """Generates a self-descriptive TOML configuration string with default values."""
     output = []
-    output.append("# Default configuration for genai_cli script")
-    output.append("# This file is loaded from ~/.config/genai_cli/config.toml")
+    output.append("# Default configuration for gai script")
+    output.append("# This file is loaded from ~/.config/gai/config.toml")
     output.append("# Settings here override script defaults but are overridden by command-line --conf-<name> arguments.")
     output.append("") # Blank line
 
