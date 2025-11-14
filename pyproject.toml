@@ -44,7 +44,9 @@ packages = ["src/gai"]
 include = ["src/gai"]
 
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = [
+    "pytest>=8.4.2",
+]
 
 [tool.ruff]
 target-version = "py39"

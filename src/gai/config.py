@@ -27,7 +27,7 @@ User Query: {{ input }}
 
 # Default configuration parameters
 DEFAULT_CONFIG: dict[str, Any] = {
-    "model": "gemini-2.0-flash-exp",
+    "model": "gemini-flash-latest",
     "temperature": 0.1,
     "response-mime-type": "text/plain",
     "max-output-tokens": None,
