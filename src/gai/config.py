@@ -32,7 +32,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "temperature": 0.1,
     "response-mime-type": "text/plain",
     "max-output-tokens": None,
-    "enable-feature-x": False,
     "system-instruction": DEFAULT_SYSTEM_INSTRUCTION,
     "user-instruction": DEFAULT_USER_INSTRUCTION,
 }
@@ -43,7 +42,6 @@ CONFIG_TYPES: dict[str, type] = {
     "temperature": float,
     "response-mime-type": str,
     "max-output-tokens": int,
-    "enable-feature-x": bool,
     "system-instruction": str,
     "user-instruction": str,
 }

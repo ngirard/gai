@@ -33,22 +33,6 @@ def test_convert_config_values_basic():
     assert result["model"] == "gemini-2.0-flash-exp"
 
 
-def test_convert_config_values_bool():
-    """Test boolean conversion."""
-    test_cases = [
-        ({"enable-feature-x": "true"}, True),
-        ({"enable-feature-x": "false"}, False),
-        ({"enable-feature-x": "yes"}, True),
-        ({"enable-feature-x": "no"}, False),
-        ({"enable-feature-x": "1"}, True),
-        ({"enable-feature-x": "0"}, False),
-    ]
-
-    for config_data, expected in test_cases:
-        result = _convert_config_values(config_data, CONFIG_TYPES, "test")
-        assert result["enable-feature-x"] == expected
-
-
 def test_convert_config_values_none():
     """Test None value handling."""
     config_data = {
