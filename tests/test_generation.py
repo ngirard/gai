@@ -75,7 +75,8 @@ def test_prepare_generate_content_config_dict_templated():
 
     assert result["temperature"] == 0.5
     assert result["system_instruction"] == "Expert in Python programming"
-    assert result["max_output_tokens"] is None
+    # max_output_tokens should not be in dict when None (for API compatibility)
+    assert "max_output_tokens" not in result
 
 
 def test_execute_generation_stream():

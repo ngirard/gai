@@ -70,7 +70,11 @@ def read_file_content(filepath: str) -> str:
 
 
 def load_config_from_file(filepath: pathlib.Path) -> dict[str, Any]:
-    """Loads configuration from a TOML file."""
+    """Loads configuration from a TOML file.
+
+    Raises:
+        ConfigError: If TOML is invalid or file cannot be read.
+    """
     config: dict[str, Any] = {}
     if filepath.exists():
         logger.info(f"Loading configuration from {filepath}")
@@ -79,23 +83,35 @@ def load_config_from_file(filepath: pathlib.Path) -> dict[str, Any]:
                 config = tomllib.load(f)
             logger.debug(f"Config loaded from file: {config}")
         except tomllib.TOMLDecodeError as e:
-            logger.error(f"Error decoding TOML from {filepath}: {e}")
-            raise
+            import sys
+
+            # Print clear error to stderr for better user experience
+            print(f"Error: Invalid TOML in configuration file {filepath}", file=sys.stderr)
+            print(f"  {e}", file=sys.stderr)
+            raise ConfigError(f"Invalid TOML in {filepath}: {e}") from e
         except Exception as e:
-            logger.error(f"Error reading config file {filepath}: {e}")
-            raise
+            import sys
+
+            print(f"Error: Cannot read configuration file {filepath}: {e}", file=sys.stderr)
+            raise ConfigError(f"Error reading config file {filepath}: {e}") from e
     else:
         logger.info(f"Configuration file not found at {filepath}. Using defaults and/or CLI args.")
     return config
 
 
 def _convert_config_values(
-    config_data: dict[str, Any], types_schema: dict[str, type], source_name: str
+    config_data: dict[str, Any], types_schema: dict[str, type], source_name: str, *, warn_unknown: bool = False
 ) -> dict[str, Any]:
     """
     Converts values in config_data to types specified in types_schema.
     Handles None values appropriately.
     Returns the converted dictionary.
+
+    Args:
+        config_data: Dictionary of configuration values
+        types_schema: Dictionary mapping config names to expected types
+        source_name: Name of the source for error messages
+        warn_unknown: If True, warn about keys not in types_schema
 
     Raises:
         ConfigError: If type conversion fails.
@@ -103,6 +119,11 @@ def _convert_config_values(
     converted_config: dict[str, Any] = {}
     for name, value in config_data.items():
         if name not in types_schema:
+            if warn_unknown:
+                logger.warning(
+                    f"Unknown configuration parameter '{name}' from {source_name}. "
+                    f"This may be a typo. Known parameters: {', '.join(sorted(types_schema.keys()))}"
+                )
             converted_config[name] = value
             logger.debug(f"Config parameter '{name}' from {source_name} has no defined type, using as is.")
             continue
@@ -190,7 +211,8 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
     try:
         raw_file_config = load_config_from_file(CONFIG_FILE_PATH)
         if raw_file_config:
-            typed_file_config = _convert_config_values(raw_file_config, CONFIG_TYPES, "file")
+            # Warn about unknown keys in config file to help catch typos
+            typed_file_config = _convert_config_values(raw_file_config, CONFIG_TYPES, "file", warn_unknown=True)
             resolved_file_config = _resolve_config_file_paths(typed_file_config)
             final_config.update(resolved_file_config)
             logger.debug(f"Config after merging file settings: {final_config}")

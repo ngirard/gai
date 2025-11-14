@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 from collections.abc import Generator
 from typing import Any
 
@@ -38,6 +39,7 @@ def prepare_generate_content_config_dict(config: dict[str, Any], template_variab
     """
     Generates the configuration dictionary for the generate_content API call.
     Applies template variables to the system instruction using Jinja2.
+    Only includes non-None values to avoid potential API compatibility issues.
     """
     temperature = config.get("temperature")
     response_mime_type = config.get("response-mime-type")
@@ -54,12 +56,18 @@ def prepare_generate_content_config_dict(config: dict[str, Any], template_variab
     )
     logger.debug(f"Templated System Instruction:\n{system_instruction_text or 'None'}")
 
+    # Build config dict with only non-None values for better API compatibility
     generate_config_dict: dict[str, Any] = {
         "temperature": temperature,
         "response_mime_type": response_mime_type,
-        "max_output_tokens": max_output_tokens,
-        "system_instruction": system_instruction_text,
     }
+
+    if max_output_tokens is not None:
+        generate_config_dict["max_output_tokens"] = max_output_tokens
+
+    if system_instruction_text is not None:
+        generate_config_dict["system_instruction"] = system_instruction_text
+
     return generate_config_dict
 
 
@@ -87,8 +95,6 @@ def stream_output(stream_generator: Generator[types.GenerateContentResponse, Non
             if chunk.text:
                 print(chunk.text, end="")
         print()
-        import sys
-
         sys.stdout.flush()
         logger.info("Generation streaming finished.")
     except types.generation_types.BlockedPromptException as e:
@@ -127,7 +133,7 @@ def generate(config: dict[str, Any], template_variables: dict[str, str]) -> None
 
     contents = prepare_prompt_contents(config, template_variables)
     generate_config_dict = prepare_generate_content_config_dict(config, template_variables)
-    model_name = config.get("model", "gemini-2.0-flash-exp")
+    model_name = config["model"]
     logger.info(f"Using model: {model_name}")
     logger.debug(f"GenerateContentConfig dictionary for API call: {generate_config_dict}")
 

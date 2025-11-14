@@ -11,36 +11,17 @@ from .generation import generate
 
 def _handle_generate_config() -> None:
     """Handle the --generate-config flag."""
-    try:
-        import tomli_w
-    except ImportError:
-        # Fall back to manual TOML generation if tomli_w is not available
-        from .config import DEFAULT_CONFIG
+    import tomli_w
 
-        print("# Default configuration for gai script")
-        print("# This file is loaded from ~/.config/gai/config.toml")
-        print()
-        for key, value in DEFAULT_CONFIG.items():
-            if value is None:
-                print(f'{key} = ""  # or set to null')
-            elif isinstance(value, bool):
-                print(f"{key} = {str(value).lower()}")
-            elif isinstance(value, str):
-                if "\n" in value:
-                    print(f'{key} = """')
-                    print(value)
-                    print('"""')
-                else:
-                    print(f'{key} = "{value}"')
-            else:
-                print(f"{key} = {value}")
-    else:
-        from .config import DEFAULT_CONFIG
+    from .config import DEFAULT_CONFIG
 
-        print("# Default configuration for gai script")
-        print("# This file is loaded from ~/.config/gai/config.toml")
-        print()
-        print(tomli_w.dumps(DEFAULT_CONFIG))
+    # Filter out None values for TOML serialization
+    config_to_dump = {k: v for k, v in DEFAULT_CONFIG.items() if v is not None}
+
+    print("# Default configuration for gai script")
+    print("# This file is loaded from ~/.config/gai/config.toml")
+    print()
+    print(tomli_w.dumps(config_to_dump))
 
 
 def main() -> None:
