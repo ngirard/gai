@@ -78,8 +78,10 @@ def test_config_path():
         text=True,
     )
     assert result.returncode == 0
-    assert "Configuration file path" in result.stdout
+    assert "User configuration file path" in result.stdout
     assert ".config/gai/config.toml" in result.stdout
+    assert "Repository configuration file path" in result.stdout
+    assert ".gai/config.toml" in result.stdout
 
 
 def test_config_validate_nonexistent():
@@ -223,7 +225,22 @@ def test_backward_compatibility_help():
         text=True,
     )
     assert result.returncode == 0
-    assert "Usage:" in result.stdout
+    assert "usage: gai" in result.stdout.lower()
+    assert "available commands" in result.stdout.lower()
+
+
+def test_invocation_without_args_shows_help():
+    """Running gai with no args should display help and exit cleanly."""
+
+    result = subprocess.run(
+        [sys.executable, "-m", "gai"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "usage: gai" in result.stdout.lower()
+    assert "available commands" in result.stdout.lower()
 
 
 def test_backward_compatibility_generate_config():

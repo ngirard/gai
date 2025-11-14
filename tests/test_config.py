@@ -135,6 +135,47 @@ def test_load_effective_config_cli_override():
     assert config["model"] == "gemini-pro"
 
 
+def test_load_effective_config_repository_layer(monkeypatch, tmp_path):
+    """Repository config should apply after user config but before CLI."""
+
+    user_config_path = tmp_path / "user-config.toml"
+    user_config_path.write_text('model = "user-model"\ntemperature = 0.3\n')
+
+    repo_config_path = tmp_path / "repo" / ".gai" / "config.toml"
+    repo_config_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_config_path.write_text('temperature = 0.6\nresponse-mime-type = "text/markdown"\n')
+
+    from gai import config as config_module
+
+    monkeypatch.setattr(config_module, "CONFIG_FILE_PATH", user_config_path)
+    monkeypatch.setattr(config_module, "get_repo_config_path", lambda *_args, **_kwargs: repo_config_path)
+
+    result = load_effective_config([])
+
+    # user config sets model, repo overrides temperature and response type
+    assert result["model"] == "user-model"
+    assert result["temperature"] == 0.6
+    assert result["response-mime-type"] == "text/markdown"
+
+
+def test_load_effective_config_cli_beats_repository(monkeypatch, tmp_path):
+    """CLI --conf arguments should still take top precedence."""
+
+    repo_config_path = tmp_path / "repo" / ".gai" / "config.toml"
+    repo_config_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_config_path.write_text("temperature = 0.4\n")
+
+    from gai import config as config_module
+
+    monkeypatch.setattr(config_module, "CONFIG_FILE_PATH", tmp_path / "user.toml")
+    monkeypatch.setattr(config_module, "get_repo_config_path", lambda *_args, **_kwargs: repo_config_path)
+
+    args = ["--conf-temperature", "0.95"]
+    result = load_effective_config(args)
+
+    assert result["temperature"] == 0.95
+
+
 def test_load_effective_config_missing_value():
     """Test missing value for --conf- argument raises error."""
     args = ["--conf-temperature"]

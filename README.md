@@ -70,6 +70,8 @@ gai config view
 
 # Generate default configuration file
 gai config defaults > ~/.config/gai/config.toml
+# Or keep one with your repository
+gai config defaults > .gai/config.toml
 ```
 
 ### CLI Structure
@@ -96,7 +98,7 @@ gai generate --conf-temperature 0.8 --conf-model gemini-pro --document "Text"
 Manage your configuration settings:
 
 ```sh
-# View effective configuration (merged from defaults, file, and CLI)
+# View effective configuration (defaults → user file → repo file → CLI)
 gai config view
 
 # Open config file in $EDITOR
@@ -240,7 +242,8 @@ gai/
     Configuration is loaded in layers:
     1. Script defaults (`DEFAULT_CONFIG`).
     2. User configuration file (`~/.config/gai/config.toml`).
-    3. Command-line `--conf-` arguments.
+    3. Repository configuration file (`<repo>/.gai/config.toml`, detected from the nearest Git root).
+    4. Command-line `--conf-` arguments.
     Later layers override earlier ones.
     Systematic type conversion (e.g., float for temperature, int for
     token counts, bool for flags) is applied with error handling.

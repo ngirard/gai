@@ -50,7 +50,7 @@ def _handle_legacy_cli(args_list: list[str]) -> None:
     effective_config = load_effective_config(args_list)
 
     # Handle --help
-    if "-h" in args_list or "--help" in args_list:
+    if not args_list or "-h" in args_list or "--help" in args_list:
         usage(effective_config)
         sys.exit(0)
 

@@ -5,35 +5,49 @@ import logging
 import os
 import subprocess
 import sys
+import textwrap
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import CONFIG_FILE_DIR, CONFIG_FILE_PATH, CONFIG_TYPES, DEFAULT_CONFIG, read_file_content
+from .config import (
+    CONFIG_FILE_DIR,
+    CONFIG_FILE_PATH,
+    CONFIG_TYPES,
+    DEFAULT_CONFIG,
+    REPO_CONFIG_RELATIVE_PATH,
+    get_repo_config_path,
+    read_file_content,
+)
 from .exceptions import CliUsageError
 from .templates import render_template_string
 
 logger = logging.getLogger(__name__)
 
 
+def _repo_config_display_path() -> str:
+    repo_config_path = get_repo_config_path()
+    if repo_config_path is not None:
+        return str(repo_config_path)
+    return f"<git repo root>/{REPO_CONFIG_RELATIVE_PATH}"
+
+
 def usage(config: dict[str, Any]) -> None:
     """Prints dynamic usage information including config and template parameters."""
     script_name = os.path.basename(sys.argv[0])
 
-    print(f"Usage: {script_name} [options] [--conf-param value ...] [--template-var value ...]")
-    print("\nOptions:")
-    print("  -h, --help            Show this help message and exit")
-    print("  --debug               Enable debug logging output")
+    parser = create_parser()
+    parser.print_help()
+
+    print("\nGlobal legacy options:")
+    print(f"  -h, --help            Show this help message and exit (same as '{script_name} --help')")
     print("  --generate-config     Generate a default config file (TOML) to stdout and exit")
     print("  --show-prompt         Render and print the final templated prompt to stdout and exit")
 
-    print("\nConfiguration:")
-    print("  Configuration is loaded in the following order of precedence (later overrides earlier):")
-    print("  1. Script defaults.")
-    print(f"  2. Configuration file (TOML format): {CONFIG_FILE_PATH}")
-    print("  3. Command-line arguments (--conf-<name> value).")
-    print("  For string parameters like 'system-instruction' or 'user-instruction',")
-    print("  a value starting with `@:` will be interpreted as a file path.")
+    print("\nConfiguration tips:")
+    print("  • Configuration layers are detailed above; later layers override earlier ones.")
+    print("  • For string parameters like 'system-instruction' or 'user-instruction',")
+    print("    a value starting with `@:` will be interpreted as a file path.")
 
     print("\nConfiguration Parameters (--conf-<name> value):")
     for name, default_value in DEFAULT_CONFIG.items():
@@ -173,10 +187,25 @@ def show_rendered_prompt(
 
 def create_parser() -> argparse.ArgumentParser:
     """Creates and returns the main argument parser with all subcommands."""
+    repo_config_hint = _repo_config_display_path()
+
     parser = argparse.ArgumentParser(
         prog="gai",
         description="Google Gemini prompting tool with flexible CLI, templating, and configuration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(
+            f"""
+            Configuration layers (later overrides earlier):
+              1. Script defaults.
+              2. User configuration file: {CONFIG_FILE_PATH}
+              3. Repository configuration file (if inside a Git repo): {repo_config_hint}
+              4. Command-line arguments (--conf-<name> value).
+
+            Template variables:
+              • Use --<name> VALUE on any command to inject data into prompts.
+              • Prefix values with '@:' to load from a file.
+            """
+        ).strip(),
     )
 
     # Global options
@@ -375,14 +404,26 @@ def handle_config_defaults() -> None:
 
     print("# Default configuration for gai")
     print(f"# Save this to: {CONFIG_FILE_PATH}")
+    print(f"# Or to a repo-specific file: <git repo root>/{REPO_CONFIG_RELATIVE_PATH}")
     print()
     print(tomli_w.dumps(config_to_dump))
 
 
 def handle_config_path() -> None:
     """Show the configuration file path."""
-    print(f"Configuration file path: {CONFIG_FILE_PATH}")
+    print(f"User configuration file path: {CONFIG_FILE_PATH}")
     if CONFIG_FILE_PATH.exists():
         print("Status: exists")
     else:
         print("Status: not found")
+
+    repo_config_path = get_repo_config_path()
+    if repo_config_path is not None:
+        print(f"Repository configuration file path: {repo_config_path}")
+        if repo_config_path.exists():
+            print("Status: exists")
+        else:
+            print("Status: not found")
+    else:
+        print(f"Repository configuration file path: <git repo root>/{REPO_CONFIG_RELATIVE_PATH}")
+        print("Status: not available outside a Git repository")

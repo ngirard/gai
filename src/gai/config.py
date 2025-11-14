@@ -2,7 +2,7 @@
 
 import logging
 import pathlib
-from typing import Any
+from typing import Any, Optional
 
 try:
     import tomllib
@@ -46,9 +46,12 @@ CONFIG_TYPES: dict[str, type] = {
     "user-instruction": str,
 }
 
-# Configuration file path
+# User-level configuration file path
 CONFIG_FILE_DIR = pathlib.Path.home() / ".config" / "gai"
 CONFIG_FILE_PATH = CONFIG_FILE_DIR / "config.toml"
+
+# Repository-level configuration relative path
+REPO_CONFIG_RELATIVE_PATH = pathlib.Path(".gai") / "config.toml"
 
 
 def read_file_content(filepath: str) -> str:
@@ -97,6 +100,29 @@ def load_config_from_file(filepath: pathlib.Path) -> dict[str, Any]:
     else:
         logger.info(f"Configuration file not found at {filepath}. Using defaults and/or CLI args.")
     return config
+
+
+def find_git_repo_root(start_path: Optional[pathlib.Path] = None) -> Optional[pathlib.Path]:
+    """Find the root directory of the current Git repository, if any."""
+
+    current = (start_path or pathlib.Path.cwd()).resolve()
+
+    for candidate in [current, *current.parents]:
+        git_marker = candidate / ".git"
+        if git_marker.exists():
+            return candidate
+
+    return None
+
+
+def get_repo_config_path(start_path: Optional[pathlib.Path] = None) -> Optional[pathlib.Path]:
+    """Return the repository-level configuration path if inside a Git repository."""
+
+    repo_root = find_git_repo_root(start_path)
+    if repo_root is None:
+        return None
+
+    return repo_root / REPO_CONFIG_RELATIVE_PATH
 
 
 def _convert_config_values(
@@ -197,7 +223,7 @@ def _resolve_config_file_paths(config_dict: dict[str, Any]) -> dict[str, Any]:
 
 def load_effective_config(args: list[str]) -> dict[str, Any]:
     """
-    Loads configuration from defaults, file, and CLI --conf- arguments.
+    Loads configuration from defaults, user file, repository file, and CLI --conf- arguments.
     Returns the final merged configuration dictionary.
 
     Raises:
@@ -207,7 +233,7 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
     final_config = DEFAULT_CONFIG.copy()
     logger.debug(f"Initial config from defaults: {final_config}")
 
-    # 2. Load and merge config from file
+    # 2. Load and merge config from user config file
     try:
         raw_file_config = load_config_from_file(CONFIG_FILE_PATH)
         if raw_file_config:
@@ -221,7 +247,24 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
     except ConfigError:
         raise
 
-    # 3. Extract and merge CLI configurations (--conf- args only)
+    # 3. Load and merge repository-level config if available
+    repo_config_path = get_repo_config_path()
+    if repo_config_path is not None:
+        try:
+            raw_repo_config = load_config_from_file(repo_config_path)
+            if raw_repo_config:
+                typed_repo_config = _convert_config_values(
+                    raw_repo_config, CONFIG_TYPES, "repository", warn_unknown=True
+                )
+                resolved_repo_config = _resolve_config_file_paths(typed_repo_config)
+                final_config.update(resolved_repo_config)
+                logger.debug(f"Config after merging repository settings: {final_config}")
+        except tomllib.TOMLDecodeError as e:
+            raise ConfigError(f"Error decoding TOML from {repo_config_path}: {e}") from e
+        except ConfigError:
+            raise
+
+    # 4. Extract and merge CLI configurations (--conf- args only)
     cli_raw_conf_params: dict[str, str] = {}
     i = 0
     while i < len(args):

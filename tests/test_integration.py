@@ -14,8 +14,8 @@ def test_cli_help():
         text=True,
     )
     assert result.returncode == 0
-    assert "Usage:" in result.stdout
-    assert "--help" in result.stdout
+    assert "usage: gai" in result.stdout.lower()
+    assert "available commands" in result.stdout.lower()
 
 
 def test_cli_generate_config():
