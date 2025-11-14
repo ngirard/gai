@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def create_jinja_env() -> jinja2.Environment:
-    """Creates and configures the global Jinja2 environment."""
+    """Creates and configures the global Jinja2 environment.
+
+    Note: FileSystemLoader is configured but currently unused, as all templates
+    are rendered via from_string(). This loader could be used in the future to
+    support named template files (e.g., loading from ~/.config/gai/templates/).
+    """
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(searchpath="."),
         undefined=jinja2.StrictUndefined,
