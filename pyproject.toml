@@ -42,8 +42,8 @@ packages = ["src/gai"]
 [tool.hatchling.build.targets.sdist]
 include = ["src/gai"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=9.0.1",
     "pytest-cov>=7.0.0",
 ]
