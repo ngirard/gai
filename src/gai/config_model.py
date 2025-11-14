@@ -38,15 +38,11 @@ class Config:
         """
         # Validate temperature range (Gemini API typically accepts 0.0-2.0)
         if not 0.0 <= self.temperature <= 2.0:
-            raise ConfigError(
-                f"temperature must be between 0.0 and 2.0, got {self.temperature}"
-            )
+            raise ConfigError(f"temperature must be between 0.0 and 2.0, got {self.temperature}")
 
         # Validate max_output_tokens
         if self.max_output_tokens is not None and self.max_output_tokens <= 0:
-            raise ConfigError(
-                f"max_output_tokens must be positive, got {self.max_output_tokens}"
-            )
+            raise ConfigError(f"max_output_tokens must be positive, got {self.max_output_tokens}")
 
         # Validate model name is not empty
         if not self.model or not self.model.strip():
@@ -55,9 +51,7 @@ class Config:
         # Validate response_mime_type
         valid_mime_types = {"text/plain", "application/json"}
         if self.response_mime_type not in valid_mime_types:
-            raise ConfigError(
-                f"response_mime_type must be one of {valid_mime_types}, got '{self.response_mime_type}'"
-            )
+            raise ConfigError(f"response_mime_type must be one of {valid_mime_types}, got '{self.response_mime_type}'")
 
     def to_dict(self) -> dict:
         """Convert config to dictionary for backward compatibility.
