@@ -29,8 +29,15 @@ pipx install git+https://github.com/ngirard/gai.git
 After installation, the `gai` command will be available on your PATH:
 
 ```sh
+# View help
 gai --help
-gai --document @:./report.md --topic "AI" --conf-temperature 0.8
+
+# Generate content
+gai generate --document @:./report.md --topic "AI" --conf-temperature 0.8
+
+# Manage configuration
+gai config view
+gai config edit
 ```
 
 ### For Development
@@ -49,15 +56,86 @@ gai --help
 
 ## Usage
 
-### Basic Usage
+### Quick Start
+
 ```sh
-# Run with template variables
-gai --document @:./report.md --topic "Chicken" --conf-temperature 0.8
+# Generate content with template variables
+gai generate --document @:./report.md --topic "Chicken" --conf-temperature 0.8
 
 # Show the rendered prompt without calling the API
-gai --document @:./report.md --topic "Seagulls" --show-prompt
+gai generate --show-prompt --document @:./report.md --topic "Seagulls"
 
-# Generate configuration file
+# View effective configuration
+gai config view
+
+# Generate default configuration file
+gai config defaults > ~/.config/gai/config.toml
+```
+
+### CLI Structure
+
+The CLI is organized into logical subcommands for different operations:
+
+#### Generate Content (`gai generate`)
+
+The primary command for generating content with the Gemini API:
+
+```sh
+# Basic generation
+gai generate --document @:./report.md --input "Summarize this"
+
+# Preview the prompt before sending
+gai generate --show-prompt --document @:./file.txt
+
+# Override config parameters
+gai generate --conf-temperature 0.8 --conf-model gemini-pro --document "Text"
+```
+
+#### Configuration Management (`gai config`)
+
+Manage your configuration settings:
+
+```sh
+# View effective configuration (merged from defaults, file, and CLI)
+gai config view
+
+# Open config file in $EDITOR
+gai config edit
+
+# Validate configuration file syntax
+gai config validate
+gai config validate --file /path/to/config.toml
+
+# Print default configuration
+gai config defaults
+
+# Show configuration file path
+gai config path
+```
+
+#### Template Rendering (`gai template render`)
+
+Debug and preview template rendering:
+
+```sh
+# Render complete prompt (system + user instructions)
+gai template render --document @:./file.txt --input "Query"
+
+# Render only user instruction
+gai template render --part user --document "Content"
+
+# Render only system instruction
+gai template render --part system --conf-system-instruction "You are helpful"
+```
+
+### Backward Compatibility
+
+All legacy command-line invocations continue to work:
+
+```sh
+# Legacy style (still supported)
+gai --document @:./report.md --topic "Chicken" --conf-temperature 0.8
+gai --show-prompt --document @:./report.md
 gai --generate-config > ~/.config/gai/config.toml
 ```
 
@@ -122,26 +200,38 @@ gai/
 
 ## Design Decisions
 
-1. Flexible command-line arguments:
+1. **Multi-level CLI with subcommands**:
+    - **Problem**: A flat CLI with many flags becomes hard to discover and organize as features grow.
+    - **Solution**: Restructured the CLI into logical subcommands (`generate`, `config`, `template`) that mirror the codebase structure. Uses argparse for robust subcommand parsing while maintaining full backward compatibility with the legacy flat options style.
+    - **Design principles**:
+        - Verb-noun structure (e.g., `config view`, `template render`)
+        - Subcommands reflect code modules (`config.py` → `config` subcommand)
+        - Short, predictable names for discoverability
+        - Easy to extend with new capabilities
+
+2. Flexible command-line arguments:
     - Problem: Standard `argparse` requires pre-defining every possible
     argument. We need to support arbitrary key-value pairs for prompt
     templating.
-    - Solution: Parse the command-line arguments manually.
+    - Solution: Parse template variables using `parse_known_args` to handle
+    arbitrary `--name value` pairs that aren't pre-defined configuration options.
 
-2. Prompt templating (using Jinja2):
+3. Prompt templating (using Jinja2):
     - Problem: Prompt content needs to be dynamic based on user input and
     potentially include logic (conditionals, loops, filters).
     - Solution: Use Jinja2. This provides a powerful, widely-used templating
     engine capable of complex logic beyond simple variable substitution.
     Variables are passed as a context dictionary.
-3. File content loading:
+
+4. File content loading:
     - Problem: Prompt variables (especially documents) can be large and
     should be loaded from files rather than passed directly on the command line.
     - Solution: Implement a simple convention where a value prefixed with
     `@:` is interpreted as a file path, and its content is read into the
     corresponding variable. This is handled during the argument parsing
     pipeline.
-4. Configurable generation parameters:
+
+5. Configurable generation parameters:
     - Problem: Model, temperature, response format, etc., should be easily
     adjustable without modifying the code, and persist across sessions.
     - Solution: Introduce a dedicated `--conf-<name> value` syntax for
@@ -155,14 +245,7 @@ gai/
     Systematic type conversion (e.g., float for temperature, int for
     token counts, bool for flags) is applied with error handling.
     Configuration values themselves can also be loaded from files using `@:`.
-5. Dynamic Help/Usage information:
-    - Problem: Standard `argparse` help doesn't know about our custom
-    template variables or `--conf-` parameters.
-    - Solution: Manually intercept `--help` and generate usage information
-    dynamically. Configuration parameters are listed by inspecting
-    `DEFAULT_CONFIG`. **Note:** Automatic listing of template variables
-    from Jinja2 templates is complex and has been removed. Users must
-    know the variables expected by their templates.
+
 6. Structured logging:
     - Problem: Avoid mixing internal script messages (parsing details, config
     used) with the actual model output (which goes to stdout).
@@ -170,12 +253,15 @@ gai/
     and debug messages are directed to stderr via logging, while the model's
     response is printed directly to stdout. A `--debug` flag is added for
     verbose logging.
-7. Show rendered prompt:
+
+7. Template rendering and preview:
     - Problem: Users may want to inspect the fully rendered prompt before sending
     it to the API, especially when debugging complex templates.
-    - Solution: Implement a `--show-prompt` CLI option that renders both system
-    and user instructions with the provided template variables, prints them
-    to stdout in a structured format, and exits.
+    - Solution: Implement `gai template render` command (and `gai generate --show-prompt`
+    for backward compatibility) that renders system and user instructions with the
+    provided template variables, prints them to stdout in a structured format,
+    and exits. Supports rendering specific parts (`--part user` or `--part system`)
+    for targeted debugging.
 
 ## Distribution and Releases
 
