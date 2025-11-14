@@ -2,13 +2,14 @@
 
 import logging
 import pathlib
-import sys
 from typing import Any
 
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib  # type: ignore
+    import tomli as tomllib  # type: ignore[import-not-found]
+
+from .exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -53,19 +54,21 @@ CONFIG_FILE_PATH = CONFIG_FILE_DIR / "config.toml"
 
 
 def read_file_content(filepath: str) -> str:
-    """Reads the content of a file."""
+    """Reads the content of a file.
+
+    Raises:
+        ConfigError: If file is not found or cannot be read.
+    """
     try:
         abs_filepath = pathlib.Path(filepath).resolve()
         logger.debug(f"Attempting to read file: {abs_filepath}")
         content = abs_filepath.read_text(encoding="utf-8")
         logger.debug(f"Successfully read file: {abs_filepath}")
         return content
-    except FileNotFoundError:
-        logger.error(f"File not found at '{filepath}' (resolved to '{abs_filepath}')")
-        sys.exit(1)
+    except FileNotFoundError as e:
+        raise ConfigError(f"File not found at '{filepath}' (resolved to '{abs_filepath}')") from e
     except Exception as e:
-        logger.error(f"Error reading file '{filepath}' (resolved to '{abs_filepath}'): {e}")
-        sys.exit(1)
+        raise ConfigError(f"Error reading file '{filepath}' (resolved to '{abs_filepath}'): {e}") from e
 
 
 def load_config_from_file(filepath: pathlib.Path) -> dict[str, Any]:
@@ -94,7 +97,10 @@ def _convert_config_values(
     """
     Converts values in config_data to types specified in types_schema.
     Handles None values appropriately.
-    Returns the converted dictionary. Raises ValueError or TypeError on failure.
+    Returns the converted dictionary.
+
+    Raises:
+        ConfigError: If type conversion fails.
     """
     converted_config: dict[str, Any] = {}
     for name, value in config_data.items():
@@ -136,11 +142,12 @@ def _convert_config_values(
             converted_config[name] = converted_value
 
         except (ValueError, TypeError) as e:
-            raise type(e)(
+            error_msg = (
                 f"Error converting config parameter '{name}' from {source_name}: "
                 f"Expected {expected_type.__name__}, got '{original_value_for_error}' "
                 f"(type: {type(original_value_for_error).__name__}). Original error: {e}"
-            ) from e
+            )
+            raise ConfigError(error_msg) from e
 
     return converted_config
 
@@ -173,6 +180,9 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
     """
     Loads configuration from defaults, file, and CLI --conf- arguments.
     Returns the final merged configuration dictionary.
+
+    Raises:
+        ConfigError: If configuration loading or parsing fails.
     """
     # 1. Start with script defaults
     final_config = DEFAULT_CONFIG.copy()
@@ -186,8 +196,10 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
             resolved_file_config = _resolve_config_file_paths(typed_file_config)
             final_config.update(resolved_file_config)
             logger.debug(f"Config after merging file settings: {final_config}")
-    except (tomllib.TOMLDecodeError, ValueError, TypeError):
-        sys.exit(1)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"Error decoding TOML from {CONFIG_FILE_PATH}: {e}") from e
+    except ConfigError:
+        raise
 
     # 3. Extract and merge CLI configurations (--conf- args only)
     cli_raw_conf_params: dict[str, str] = {}
@@ -196,12 +208,10 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
         arg = args[i]
         if arg.startswith("--conf-"):
             if i + 1 >= len(args):
-                logger.error(f"Error: Configuration argument '{arg}' requires a value.")
-                sys.exit(1)
+                raise ConfigError(f"Configuration argument '{arg}' requires a value.")
             conf_name = arg[len("--conf-") :]
             if not conf_name:
-                logger.error(f"Error: Configuration argument '{arg}' is missing a name after '--conf-'.")
-                sys.exit(1)
+                raise ConfigError(f"Configuration argument '{arg}' is missing a name after '--conf-'.")
             cli_raw_conf_params[conf_name] = args[i + 1]
             logger.debug(f"Parsed raw CLI config: {conf_name}={cli_raw_conf_params[conf_name]}")
             i += 2
@@ -209,13 +219,10 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
             i += 1
 
     if cli_raw_conf_params:
-        try:
-            typed_cli_config = _convert_config_values(cli_raw_conf_params, CONFIG_TYPES, "CLI")
-            resolved_cli_config = _resolve_config_file_paths(typed_cli_config)
-            final_config.update(resolved_cli_config)
-            logger.debug(f"Config after merging CLI settings: {final_config}")
-        except (ValueError, TypeError):
-            sys.exit(1)
+        typed_cli_config = _convert_config_values(cli_raw_conf_params, CONFIG_TYPES, "CLI")
+        resolved_cli_config = _resolve_config_file_paths(typed_cli_config)
+        final_config.update(resolved_cli_config)
+        logger.debug(f"Config after merging CLI settings: {final_config}")
 
     logger.info(f"Effective Configuration: {final_config}")
     return final_config

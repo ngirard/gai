@@ -62,10 +62,7 @@ def test_google_genai_streaming():
     stream = client.models.generate_content_stream(model=model_name, contents=contents)
 
     # Collect chunks
-    chunks = []
-    for chunk in stream:
-        if chunk.text:
-            chunks.append(chunk.text)
+    chunks = [chunk.text for chunk in stream if chunk.text]
 
     # Verify we got chunks
     assert len(chunks) > 0

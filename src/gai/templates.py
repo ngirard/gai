@@ -1,10 +1,11 @@
 """Template handling for gai using Jinja2."""
 
 import logging
-import sys
 from typing import Any, Optional
 
 import jinja2
+
+from .exceptions import TemplateError
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,9 @@ def render_template_string(
     """
     Renders a Jinja2 template string with the given variables.
     Returns the rendered string, or None if template_str is None.
-    Logs and exits on Jinja2 rendering errors.
+
+    Raises:
+        TemplateError: If template rendering fails.
     """
     if template_str is None:
         logger.debug(f"Template '{template_name}' is None, skipping rendering.")
@@ -45,8 +48,6 @@ def render_template_string(
         error_msg = f"Error rendering '{template_name}' template: {e}"
         if hasattr(e, "lineno") and e.lineno is not None:
             error_msg += f" (near line {e.lineno})"
-        logger.error(error_msg)
-        sys.exit(1)
+        raise TemplateError(error_msg) from e
     except Exception as e:
-        logger.error(f"An unexpected error occurred during '{template_name}' templating: {e}")
-        sys.exit(1)
+        raise TemplateError(f"An unexpected error occurred during '{template_name}' templating: {e}") from e

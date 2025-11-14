@@ -51,6 +51,7 @@ ignore = [
     "E501",   # line too long, handled by formatter
     "S101",   # use of assert (useful in tests)
     "PLR0913", # too many arguments
+    "PLR0915", # too many statements (acceptable for main function)
     "TRY003", # avoid specifying long messages outside exception class
     "COM812", # conflicts with formatter
     "ISC001", # conflicts with formatter

@@ -3,6 +3,7 @@
 import pytest
 
 from gai.config import CONFIG_TYPES, _convert_config_values
+from gai.exceptions import ConfigError
 
 
 def test_convert_config_values_basic():
@@ -54,5 +55,5 @@ def test_convert_config_values_invalid():
         "temperature": "not-a-number",
     }
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ConfigError):
         _convert_config_values(config_data, CONFIG_TYPES, "test")
