@@ -1,5 +1,8 @@
 """Tests for template module."""
 
+import pytest
+
+from gai.exceptions import TemplateError
 from gai.templates import render_template_string
 
 
@@ -50,3 +53,21 @@ User Query: {{ input }}
 
     assert "This is a test document." in result
     assert "User Query: What is this about?" in result
+
+
+def test_render_template_string_undefined_variable():
+    """Test that undefined variables raise TemplateError with StrictUndefined."""
+    template = "Hello, {{ undefined_var }}!"
+    variables = {}
+
+    with pytest.raises(TemplateError):
+        render_template_string(template, variables, "test")
+
+
+def test_render_template_string_syntax_error():
+    """Test that syntax errors raise TemplateError."""
+    template = "Hello, {% if name %} {{ name {% endif %}!"
+    variables = {"name": "World"}
+
+    with pytest.raises(TemplateError):
+        render_template_string(template, variables, "test")

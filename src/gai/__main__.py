@@ -5,65 +5,117 @@ import sys
 
 from .cli import parse_template_args, show_rendered_prompt, usage
 from .config import CONFIG_FILE_DIR, load_effective_config
+from .exceptions import CliUsageError, ConfigError, GaiError, GenerationError, TemplateError
 from .generation import generate
 
 
-def main() -> None:
-    """Main execution function."""
-    # Configure basic logging early
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stderr)
-
-    # Ensure config directory exists
+def _handle_generate_config() -> None:
+    """Handle the --generate-config flag."""
     try:
-        CONFIG_FILE_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        logging.getLogger(__name__).warning(f"Could not create config directory {CONFIG_FILE_DIR}: {e}")
-
-    args_list = list(sys.argv[1:])
-
-    # Handle --generate-config early
-    if "--generate-config" in args_list:
-        import toml
-
+        import tomli_w
+    except ImportError:
+        # Fall back to manual TOML generation if tomli_w is not available
         from .config import DEFAULT_CONFIG
 
         print("# Default configuration for gai script")
         print("# This file is loaded from ~/.config/gai/config.toml")
         print()
-        print(toml.dumps(DEFAULT_CONFIG))
-        sys.exit(0)
+        for key, value in DEFAULT_CONFIG.items():
+            if value is None:
+                print(f'{key} = ""  # or set to null')
+            elif isinstance(value, bool):
+                print(f"{key} = {str(value).lower()}")
+            elif isinstance(value, str):
+                if "\n" in value:
+                    print(f'{key} = """')
+                    print(value)
+                    print('"""')
+                else:
+                    print(f'{key} = "{value}"')
+            else:
+                print(f"{key} = {value}")
+    else:
+        from .config import DEFAULT_CONFIG
 
-    # Load effective config
+        print("# Default configuration for gai script")
+        print("# This file is loaded from ~/.config/gai/config.toml")
+        print()
+        print(tomli_w.dumps(DEFAULT_CONFIG))
+
+
+def main() -> None:
+    """Main execution function."""
+    # Configure logging once, early in the process
+    log_level = logging.DEBUG if "--debug" in sys.argv else logging.WARNING
+    logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stderr)
+
+    logger = logging.getLogger(__name__)
+
+    # Ensure config directory exists
     try:
+        CONFIG_FILE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.warning(f"Could not create config directory {CONFIG_FILE_DIR}: {e}")
+
+    args_list = list(sys.argv[1:])
+
+    # Handle --generate-config early
+    if "--generate-config" in args_list:
+        _handle_generate_config()
+        sys.exit(0)
+
+    try:
+        # Load effective config
         effective_config = load_effective_config(args_list)
-    except Exception:
+
+        # Handle --help
+        if "-h" in args_list or "--help" in args_list:
+            usage(effective_config)
+            sys.exit(0)
+
+        # Parse template arguments
+        template_vars = parse_template_args(args_list)
+
+        # Handle --show-prompt
+        if "--show-prompt" in args_list:
+            # Adjust logging level if needed
+            if "--debug" in args_list:
+                logging.getLogger().setLevel(logging.DEBUG)
+            else:
+                logging.getLogger().setLevel(logging.INFO)
+            show_rendered_prompt(effective_config, template_vars)
+            sys.exit(0)
+
+        # Adjust logging level for normal execution
+        if "--debug" in args_list:
+            logging.getLogger().setLevel(logging.DEBUG)
+        else:
+            logging.getLogger().setLevel(logging.INFO)
+
+        # Run generation
+        generate(effective_config, template_vars)
+
+    except ConfigError as e:
+        logger.error(f"Configuration error: {e}")
         sys.exit(1)
-
-    # Handle --help
-    if "-h" in args_list or "--help" in args_list:
-        usage(effective_config)
-        sys.exit(0)
-
-    # Parse template arguments
-    template_vars = parse_template_args(args_list)
-
-    # Handle --show-prompt
-    if "--show-prompt" in args_list:
-        log_level = logging.DEBUG if "--debug" in args_list else logging.INFO
-        logging.basicConfig(
-            level=log_level, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stderr, force=True
-        )
-        show_rendered_prompt(effective_config, template_vars)
-        sys.exit(0)
-
-    # Set logging level for normal execution
-    log_level = logging.DEBUG if "--debug" in args_list else logging.INFO
-    logging.basicConfig(
-        level=log_level, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stderr, force=True
-    )
-
-    # Run generation
-    generate(effective_config, template_vars)
+    except TemplateError as e:
+        logger.error(f"Template error: {e}")
+        sys.exit(1)
+    except CliUsageError as e:
+        logger.error(f"Usage error: {e}")
+        sys.exit(1)
+    except GenerationError as e:
+        logger.error(f"Generation error: {e}")
+        sys.exit(1)
+    except GaiError as e:
+        logger.error(f"Error: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        sys.exit(130)  # Standard exit code for SIGINT
+    except Exception:
+        logger.exception("Unexpected error")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

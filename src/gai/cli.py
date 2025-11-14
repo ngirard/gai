@@ -7,6 +7,7 @@ from collections.abc import Generator
 from typing import Any
 
 from .config import CONFIG_FILE_PATH, CONFIG_TYPES, DEFAULT_CONFIG, read_file_content
+from .exceptions import CliUsageError
 from .templates import render_template_string
 
 logger = logging.getLogger(__name__)
@@ -56,17 +57,19 @@ def usage(config: dict[str, Any]) -> None:
 
 
 def pair_args(args: list[str]) -> Generator[tuple[str, str], None, None]:
-    """Generator that yields (name_arg, value_arg) pairs from arguments."""
+    """Generator that yields (name_arg, value_arg) pairs from arguments.
+
+    Raises:
+        CliUsageError: If argument parsing fails.
+    """
     i = 0
     while i < len(args):
         name_arg = args[i]
         if not name_arg.startswith("--"):
-            logger.error(f"Internal Error: Non '--' argument passed to pair_args: '{name_arg}'")
-            sys.exit(1)
+            raise CliUsageError(f"Internal Error: Non '--' argument passed to pair_args: '{name_arg}'")
 
         if i + 1 >= len(args):
-            logger.error(f"Error: Argument '{name_arg}' requires a value.")
-            sys.exit(1)
+            raise CliUsageError(f"Argument '{name_arg}' requires a value.")
 
         value_arg = args[i + 1]
         yield (name_arg, value_arg)
@@ -88,7 +91,11 @@ def process_template_values(
 
 
 def parse_template_args(args: list[str]) -> dict[str, str]:
-    """Parses command-line arguments that are NOT --conf- or known flags."""
+    """Parses command-line arguments that are NOT --conf- or known flags.
+
+    Raises:
+        CliUsageError: If argument parsing fails.
+    """
     template_args_list: list[str] = []
     i = 0
     while i < len(args):
@@ -99,25 +106,23 @@ def parse_template_args(args: list[str]) -> dict[str, str]:
             i += 1
         elif arg.startswith("--"):
             if i + 1 >= len(args):
-                logger.error(f"Error: Template argument '{arg}' requires a value.")
-                sys.exit(1)
+                raise CliUsageError(f"Template argument '{arg}' requires a value.")
             template_args_list.append(arg)
             template_args_list.append(args[i + 1])
             logger.debug(f"Identified template arg: {arg} {args[i + 1]}")
             i += 2
         else:
-            logger.error(f"Error: Unexpected argument '{arg}'. Arguments must start with '--'.")
-            sys.exit(1)
+            raise CliUsageError(f"Unexpected argument '{arg}'. Arguments must start with '--'.")
 
     arg_pairs_generator = pair_args(template_args_list)
     processed_pairs_generator = process_template_values(arg_pairs_generator)
     template_variables = dict(processed_pairs_generator)
-    logger.info(f"Template Variables: {template_variables}")
+    logger.debug(f"Template Variables: {template_variables}")
     return template_variables
 
 
 def show_rendered_prompt(config: dict[str, Any], template_variables: dict[str, str]) -> None:
-    """Renders and prints the system and user instruction templates, then exits."""
+    """Renders and prints the system and user instruction templates."""
     logger.info("Rendering prompt for display (--show-prompt)...")
 
     system_instruction_template_str = config.get("system-instruction")
@@ -142,4 +147,3 @@ def show_rendered_prompt(config: dict[str, Any], template_variables: dict[str, s
         final_output = f"{system_block}\n{user_block}"
 
     print(final_output)
-    sys.exit(0)
