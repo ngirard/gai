@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Standalone script (if accidentally built during testing)
+gai.py
+
 # C extensions
 *.so
 

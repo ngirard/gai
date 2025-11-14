@@ -8,7 +8,33 @@ This project provides a robust and flexible command-line interface for interacti
 
 ## Installation
 
-### As a Package (Recommended for Development)
+### For Users (Recommended)
+
+Install `gai` as a standard Python package using your preferred tool:
+
+```sh
+# Using pipx (recommended for CLI tools - installs in isolated environment)
+pipx install gai
+
+# Using pip
+pip install gai
+
+# Using uv
+uv tool install gai
+
+# Once published to PyPI, you can also install directly from Git
+pipx install git+https://github.com/ngirard/gai.git
+```
+
+After installation, the `gai` command will be available on your PATH:
+
+```sh
+gai --help
+gai --document @:./report.md --topic "AI" --conf-temperature 0.8
+```
+
+### For Development
+
 ```sh
 # Clone the repository
 git clone https://github.com/ngirard/gai.git
@@ -17,17 +43,8 @@ cd gai
 # Set up the development environment with uv
 just setup
 
-# Run the tool
+# Run the tool in development mode
 gai --help
-```
-
-### As a Standalone Script
-```sh
-# Build the standalone script
-just build-script
-
-# Run it directly
-./gai.py --document @:./report.md --topic "AI" --conf-temperature 0.8
 ```
 
 ## Usage
@@ -64,12 +81,16 @@ just format
 # Run all quality checks
 just check
 
-# Build standalone script
-just build-script
-
-# Build package
+# Build wheel and sdist for distribution
 just build
 ```
+
+## Dependencies
+
+The project uses `pyproject.toml` as the single source of truth for dependencies:
+- `google-genai>=1.15.0` - Google GenAI API client
+- `jinja2>=3.1.0` - Template rendering
+- `tomli>=2.0.0; python_version < '3.11'` - TOML parsing for Python < 3.11
 
 ## Prerequisites
 - Python 3.9+
@@ -96,7 +117,6 @@ gai/
 ├── pyproject.toml        # Project metadata and dependencies
 ├── ruff.toml             # Linting and formatting config
 ├── justfile              # Task runner configuration
-├── build_script.py       # Builds standalone script
 └── README.md             # This file
 ```
 
@@ -156,3 +176,41 @@ gai/
     - Solution: Implement a `--show-prompt` CLI option that renders both system
     and user instructions with the provided template variables, prints them
     to stdout in a structured format, and exits.
+
+## Distribution and Releases
+
+This project uses wheels as the primary distribution method, making it installable via standard Python package managers.
+
+### For Maintainers
+
+#### Publishing to PyPI
+
+1. Tag a release:
+   ```sh
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+2. The GitHub Actions release workflow will automatically:
+   - Build the wheel and source distribution
+   - Publish to PyPI (requires PYPI_API_TOKEN secret or trusted publishing setup)
+   - Create a GitHub release with the distribution files attached
+
+#### Manual Publishing
+
+```sh
+# Build distributions
+just build
+
+# Publish to PyPI
+just publish
+
+# Or with explicit token
+just publish YOUR_PYPI_TOKEN
+```
+
+### Version Management
+
+- Version is defined in `pyproject.toml` and `src/gai/__init__.py`
+- Keep both synchronized when releasing new versions
+- Follow semantic versioning (MAJOR.MINOR.PATCH)

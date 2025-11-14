@@ -102,6 +102,7 @@ tree:
 build:
     Build source distribution (sdist) and wheel for the project.
     Artifacts are placed in the `dist/` directory.
+    Users can install the wheel via `pip install gai`, `pipx install gai`, or `uv tool install gai`.
 
 build-release:
     Build sdist and wheel for release, ensuring no `tool.uv.sources` are used.
@@ -295,11 +296,6 @@ tree:
 
 
 # --- Building and Distribution ---
-
-# Build standalone gai.py script from modular sources
-build-script:
-    @echo "🔨 Building standalone gai.py from modular sources..."
-    uv run python build_script.py
 
 # Build source distribution (sdist) and wheel.
 build:
