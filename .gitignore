@@ -127,7 +127,7 @@ dmypy.json
 
 # uv
 .uv/
-uv.lock
+#uv.lock
 
 # IDEs
 .vscode/
