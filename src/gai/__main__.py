@@ -10,6 +10,8 @@ from .cli import (
     handle_config_path,
     handle_config_validate,
     handle_config_view,
+    handle_template_browse,
+    handle_template_list,
     parse_args_for_new_cli,
     parse_template_args,
     show_rendered_prompt,
@@ -139,6 +141,14 @@ def _handle_new_cli(args_list: list[str]) -> None:
                 # "both" or default is None (renders both)
 
             show_rendered_prompt(effective_config, template_vars, part)
+        elif parsed.template_command == "list":
+            # Load config and handle template list
+            effective_config = load_effective_config(args_list)
+            handle_template_list(effective_config, parsed)
+        elif parsed.template_command == "browse":
+            # Load config and handle template browse
+            effective_config = load_effective_config(args_list)
+            handle_template_browse(effective_config, parsed)
         else:
             # No subcommand provided for template
             parser.parse_args(["template", "-h"])

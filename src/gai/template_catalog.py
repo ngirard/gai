@@ -227,3 +227,31 @@ class TemplateCatalog:
             List of logical_name_full strings in catalog order
         """
         return [r.logical_name_full for r in self.records]
+
+
+def build_template_catalog(config: dict[str, any]) -> TemplateCatalog:
+    """Build a TemplateCatalog from the effective configuration.
+
+    This is the centralized function for converting configuration into a usable
+    template catalog, used by template list, browse, and render commands.
+
+    Steps:
+      - Resolve template roots from config
+      - Discover templates across project/user/builtin tiers
+      - Wrap them in a TemplateCatalog
+
+    Args:
+        config: The effective configuration dictionary
+
+    Returns:
+        TemplateCatalog containing all discovered templates
+    """
+    from .config import get_template_roots
+
+    roots = get_template_roots(config)
+    records = discover_templates(
+        project_roots=roots["project"],
+        user_roots=roots["user"],
+        builtin_roots=roots["builtin"],
+    )
+    return TemplateCatalog(records)
