@@ -73,6 +73,7 @@ ignore = [
 [lint.per-file-ignores]
 "tests/**/*.py" = [
     "S101",   # assert allowed in tests
+    "S108",   # /tmp usage in tests is safe
     "S603",   # subprocess call (safe in integration tests)
     "PLW1510", # subprocess.run without explicit check (expected in tests)
     "ARG001", # unused function arguments in tests

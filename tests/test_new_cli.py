@@ -94,7 +94,7 @@ def test_config_validate_nonexistent():
             "config",
             "validate",
             "--file",
-            "/tmp/nonexistent_config.toml",  # noqa: S108
+            "/tmp/nonexistent_config.toml",
         ],
         capture_output=True,
         text=True,

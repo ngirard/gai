@@ -34,6 +34,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "max-output-tokens": None,
     "system-instruction": DEFAULT_SYSTEM_INSTRUCTION,
     "user-instruction": DEFAULT_USER_INSTRUCTION,
+    # Template catalog configuration
+    "project-template-paths": None,
+    "user-template-paths": None,
+    "builtin-template-paths": None,
+    "system-instruction-template": None,
+    "user-instruction-template": None,
 }
 
 # Schema for configuration parameter types
@@ -44,6 +50,12 @@ CONFIG_TYPES: dict[str, type] = {
     "max-output-tokens": int,
     "system-instruction": str,
     "user-instruction": str,
+    # Template catalog types
+    "project-template-paths": list,
+    "user-template-paths": list,
+    "builtin-template-paths": list,
+    "system-instruction-template": str,
+    "user-instruction-template": str,
 }
 
 # User-level configuration file path
@@ -289,3 +301,75 @@ def load_effective_config(args: list[str]) -> dict[str, Any]:
 
     logger.info(f"Effective Configuration: {final_config}")
     return final_config
+
+
+def get_template_roots(config: dict[str, Any]) -> dict[str, list[pathlib.Path]]:
+    """Resolve template root paths from configuration.
+
+    Converts the template path lists from configuration into resolved absolute paths,
+    handling tilde expansion and relative path resolution.
+
+    Args:
+        config: The configuration dictionary
+
+    Returns:
+        Dictionary mapping tier names to lists of resolved absolute paths:
+        {"project": [...], "user": [...], "builtin": [...]}
+
+    Note:
+        - Tilde (~) is expanded to the user's home directory
+        - Relative paths in project tier are resolved against repo root (or cwd)
+        - Relative paths in user tier are resolved against home directory
+        - Relative paths in builtin tier are resolved against home directory
+        - Non-existent paths are included (caller decides whether to skip them)
+    """
+    result: dict[str, list[pathlib.Path]] = {
+        "project": [],
+        "user": [],
+        "builtin": [],
+    }
+
+    # Get the repository root for resolving project-relative paths
+    repo_root = find_git_repo_root()
+    if repo_root is None:
+        repo_root = pathlib.Path.cwd()
+
+    # Process project template paths
+    project_paths = config.get("project-template-paths")
+    if project_paths:
+        if not isinstance(project_paths, list):
+            logger.warning(f"project-template-paths should be a list, got {type(project_paths)}")
+            project_paths = [project_paths]
+        for path_str in project_paths:
+            path = pathlib.Path(path_str).expanduser()
+            path = (repo_root / path).resolve() if not path.is_absolute() else path.resolve()
+            result["project"].append(path)
+            logger.debug(f"Resolved project template path: {path_str} -> {path}")
+
+    # Process user template paths
+    user_paths = config.get("user-template-paths")
+    if user_paths:
+        if not isinstance(user_paths, list):
+            logger.warning(f"user-template-paths should be a list, got {type(user_paths)}")
+            user_paths = [user_paths]
+        for path_str in user_paths:
+            path = pathlib.Path(path_str).expanduser()
+            # Resolve relative user paths against home directory
+            path = (pathlib.Path.home() / path).resolve() if not path.is_absolute() else path.resolve()
+            result["user"].append(path)
+            logger.debug(f"Resolved user template path: {path_str} -> {path}")
+
+    # Process builtin template paths
+    builtin_paths = config.get("builtin-template-paths")
+    if builtin_paths:
+        if not isinstance(builtin_paths, list):
+            logger.warning(f"builtin-template-paths should be a list, got {type(builtin_paths)}")
+            builtin_paths = [builtin_paths]
+        for path_str in builtin_paths:
+            path = pathlib.Path(path_str).expanduser()
+            # Resolve relative builtin paths against home directory
+            path = (pathlib.Path.home() / path).resolve() if not path.is_absolute() else path.resolve()
+            result["builtin"].append(path)
+            logger.debug(f"Resolved builtin template path: {path_str} -> {path}")
+
+    return result
