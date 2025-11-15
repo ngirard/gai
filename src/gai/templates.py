@@ -271,3 +271,103 @@ def create_jinja_env_from_catalog(
     )
     logger.debug("Created Jinja2 environment with CatalogLoader")
     return env
+
+
+def render_system_instruction(config: dict[str, Any], template_vars: dict[str, Any]) -> Optional[str]:
+    """Render the system instruction using either named templates or literal strings.
+
+    This function implements the precedence rule for system instructions:
+    1. If 'system-instruction-template' is set, use catalog-based rendering
+    2. Otherwise, fall back to 'system-instruction' with render_template_string
+
+    Args:
+        config: Configuration dictionary
+        template_vars: Template variables for rendering
+
+    Returns:
+        Rendered system instruction string, or None if no instruction is configured
+
+    Raises:
+        TemplateError: If template rendering fails
+        TemplateNotFoundError: If a named template cannot be found
+        TemplateAmbiguityError: If a named template is ambiguous
+    """
+    # Check for named template first (higher precedence)
+    template_name = config.get("system-instruction-template")
+    if template_name:
+        logger.debug(f"Using named template for system instruction: '{template_name}'")
+        # Import here to avoid circular dependency
+        from .config import get_template_roots
+        from .template_catalog import discover_templates
+
+        # Build catalog from configured roots
+        roots = get_template_roots(config)
+        catalog = discover_templates(roots["project"], roots["user"], roots["builtin"])
+
+        # Create environment with catalog loader
+        env = create_jinja_env_from_catalog(catalog)
+
+        try:
+            # Load and render the named template
+            template = env.get_template(template_name)
+            rendered = template.render(template_vars)
+            logger.debug(f"Successfully rendered system instruction from template '{template_name}'")
+            return rendered
+        except jinja2.TemplateNotFound as e:
+            raise TemplateNotFoundError(template_name, []) from e
+        except jinja2.exceptions.TemplateError as e:
+            raise TemplateError(f"Error rendering system instruction template '{template_name}': {e}") from e
+
+    # Fall back to literal template string
+    literal_template = config.get("system-instruction")
+    return render_template_string(literal_template, template_vars, "system-instruction")
+
+
+def render_user_instruction(config: dict[str, Any], template_vars: dict[str, Any]) -> Optional[str]:
+    """Render the user instruction using either named templates or literal strings.
+
+    This function implements the precedence rule for user instructions:
+    1. If 'user-instruction-template' is set, use catalog-based rendering
+    2. Otherwise, fall back to 'user-instruction' with render_template_string
+
+    Args:
+        config: Configuration dictionary
+        template_vars: Template variables for rendering
+
+    Returns:
+        Rendered user instruction string, or None if no instruction is configured
+
+    Raises:
+        TemplateError: If template rendering fails
+        TemplateNotFoundError: If a named template cannot be found
+        TemplateAmbiguityError: If a named template is ambiguous
+    """
+    # Check for named template first (higher precedence)
+    template_name = config.get("user-instruction-template")
+    if template_name:
+        logger.debug(f"Using named template for user instruction: '{template_name}'")
+        # Import here to avoid circular dependency
+        from .config import get_template_roots
+        from .template_catalog import discover_templates
+
+        # Build catalog from configured roots
+        roots = get_template_roots(config)
+        catalog = discover_templates(roots["project"], roots["user"], roots["builtin"])
+
+        # Create environment with catalog loader
+        env = create_jinja_env_from_catalog(catalog)
+
+        try:
+            # Load and render the named template
+            template = env.get_template(template_name)
+            rendered = template.render(template_vars)
+            logger.debug(f"Successfully rendered user instruction from template '{template_name}'")
+            return rendered
+        except jinja2.TemplateNotFound as e:
+            raise TemplateNotFoundError(template_name, []) from e
+        except jinja2.exceptions.TemplateError as e:
+            raise TemplateError(f"Error rendering user instruction template '{template_name}': {e}") from e
+
+    # Fall back to literal template string
+    literal_template = config.get("user-instruction")
+    return render_template_string(literal_template, template_vars, "user-instruction")

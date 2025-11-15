@@ -20,7 +20,7 @@ from .config import (
     read_file_content,
 )
 from .exceptions import CliUsageError
-from .templates import render_template_string
+from .templates import render_system_instruction, render_user_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -150,21 +150,14 @@ def show_rendered_prompt(
     """
     logger.info("Rendering prompt for display...")
 
-    system_instruction_template_str = config.get("system-instruction")
-    user_instruction_template_str = config.get("user-instruction")
-
     if part == "system" or part is None:
-        rendered_system_instruction = render_template_string(
-            system_instruction_template_str, template_variables, "system-instruction"
-        )
+        rendered_system_instruction = render_system_instruction(config, template_variables)
         system_content_processed = (rendered_system_instruction or "").strip()
     else:
         system_content_processed = ""
 
     if part == "user" or part is None:
-        rendered_user_instruction = render_template_string(
-            user_instruction_template_str, template_variables, "user-instruction"
-        )
+        rendered_user_instruction = render_user_instruction(config, template_variables)
         user_content_processed = (rendered_user_instruction or "").strip()
     else:
         user_content_processed = ""
