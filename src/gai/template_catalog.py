@@ -6,6 +6,11 @@ in goals/templates/Specification.md. It provides:
 - Data structures for template records and tiers
 - Discovery algorithm to scan template roots
 - Catalog ordering by tier precedence, root order, and path
+
+The catalog system underpins recursive template resolution: when templates use
+{% extends %}, {% include %}, or {% import %} to reference other templates,
+the CatalogLoader in templates.py uses this catalog to resolve all nested
+references using consistent tier precedence rules.
 """
 
 import logging

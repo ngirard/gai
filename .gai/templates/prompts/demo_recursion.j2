@@ -1,0 +1,7 @@
+{% extends "layout/base_conversation" %}
+
+{% block task %}
+This is a demo of recursive template expansion for {{ subject }}.
+
+{% include "partials/output_format" %}
+{% endblock %}

@@ -310,7 +310,7 @@ Analyze the following document for key insights:
 Create reusable macros:
 
 **File:** `.gai/templates/macros/formatting.j2`
-```jinja2
+````jinja2
 {% macro code_block(language, code) %}
 ```{{ language }}
 {{ code }}
@@ -322,7 +322,7 @@ Create reusable macros:
 
 {{ content }}
 {% endmacro %}
-```
+````
 
 **File:** `.gai/templates/prompts/code_review.j2`
 ```jinja2
@@ -336,6 +336,160 @@ Review this code:
 {{ fmt.section("Known Issues", issues) }}
 {% endif %}
 ```
+
+### Recursive Includes and Variable Sharing
+
+Named templates fully support **recursive composition**: templates can include, extend, or import other templates, which can themselves include other templates, to any depth. All templates in the chain share the same variable context.
+
+**How it works:**
+
+- All `{% extends %}`, `{% include %}`, and `{% import %}` statements use the same catalog-based resolver
+- Nested templates follow the same tier precedence and logical name resolution rules
+- Variables passed to the top-level template are available in all included/extended templates
+- The same Jinja environment and catalog are used throughout the rendering
+
+**Example of three-level nesting:**
+
+**File:** `.gai/templates/layout/base_conversation.j2`
+```jinja2
+You are {{ role }}.
+
+{% block task %}
+[base task]
+{% endblock %}
+
+{% block signature %}
+-- End of instruction --
+{% endblock %}
+```
+
+**File:** `.gai/templates/partials/greeting.j2`
+```jinja2
+Hello {{ username }}!
+```
+
+**File:** `.gai/templates/partials/output_format.j2`
+```jinja2
+Output format:
+- variable: {{ important_var }}
+- context: {{ context_var }}
+```
+
+**File:** `.gai/templates/prompts/nested_demo.j2`
+```jinja2
+{% extends "layout/base_conversation" %}
+
+{% block task %}
+{% include "partials/greeting" %}
+
+Task details for {{ subject }}:
+{% include "partials/output_format" %}
+{% endblock %}
+```
+
+**Usage:**
+```bash
+gai template render \
+  --conf-project-template-paths ".gai/templates" \
+  --conf-user-instruction-template "prompts/nested_demo" \
+  --role "assistant" \
+  --username "Alice" \
+  --subject "nested templates" \
+  --important_var "VALUE" \
+  --context_var "CONTEXT"
+```
+
+**Output:**
+```
+You are assistant.
+
+Hello Alice!
+
+Task details for nested templates:
+Output format:
+- variable: VALUE
+- context: CONTEXT
+-- End of instruction --
+```
+
+**Key points:**
+
+- Variables like `role`, `username`, `subject`, `important_var`, and `context_var` are accessible in all templates
+- The base template (`layout/base_conversation`) is extended
+- Two partials (`greeting` and `output_format`) are included within the extended block
+- All logical names use extensionless references and resolve via the catalog
+- If any variable is missing, Jinja's `StrictUndefined` will raise a clear error
+
+**Important notes for literal templates:**
+
+Named templates (`*-instruction-template`) support recursive catalog-based composition. However, **literal templates** (`system-instruction` and `user-instruction` when provided as strings) do *not* use the template catalog. Literal templates:
+
+- Are rendered using a simple string-based environment
+- Cannot use `{% include %}` or `{% extends %}` to reference templates by logical name
+- Should be used for simple, self-contained templates
+- For composition, use named templates instead
+
+### Variable Security and Template Injection Prevention
+
+Template variables are always treated as **data, not code**. This is a critical security feature that prevents template injection attacks.
+
+**How it works:**
+
+When you pass a variable like `--subject 'Text with {{ var }}'`, the Jinja syntax in the variable value is rendered **literally**, not evaluated as a template expression.
+
+**Example:**
+
+```bash
+gai template render \
+  --conf-project-template-paths ".gai/templates" \
+  --conf-user-instruction-template "simple" \
+  --subject "Comparing {{ doc }} with the codebase" \
+  --doc "requirements.md"
+```
+
+If the template is:
+```jinja2
+Subject: {{ subject }}
+Document: {{ doc }}
+```
+
+The output will be:
+```
+Subject: Comparing {{ doc }} with the codebase
+Document: requirements.md
+```
+
+Note that `{{ doc }}` appears **literally** in the subject line, not replaced with "requirements.md". This is intentional and correct.
+
+**Why this matters:**
+
+1. **Security**: Prevents malicious or accidental code injection via variable values
+2. **Predictability**: Variables always render as the exact text you provide
+3. **Safety**: Template code cannot be hidden in data from external sources (files, user input, etc.)
+
+**If you want dynamic text in variables:**
+
+If you need to construct variable values with dynamic content, do so **before** passing them to the template:
+
+```bash
+# Construct the value first
+SUBJECT="Comparing ${DOC} with the codebase"
+
+# Then pass the fully-formed string
+gai template render \
+  --conf-user-instruction-template "simple" \
+  --subject "$SUBJECT" \
+  --doc "requirements.md"
+```
+
+Or use the template itself to combine variables:
+
+```jinja2
+Subject: Comparing {{ doc }} with the codebase
+Document: {{ doc }}
+```
+
+This ensures all template logic stays in template files where it can be reviewed and version-controlled.
 
 ## Best Practices
 
@@ -457,6 +611,30 @@ TemplateError: 'document' is undefined
 2. Use a default value in the template: `{{ document | default("") }}`
 3. Make variables optional: `{% if document %}...{% endif %}`
 4. Check for typos in variable names
+
+### Nested Template Not Found
+
+**Error message:**
+```
+TemplateError: Error rendering 'prompts/main' template: ...
+  (nested) TemplateNotFound: partials/output_format
+```
+
+**Problem:** A template successfully loads, but an `{% include %}` or `{% extends %}` inside it fails to resolve a nested template.
+
+**Solutions:**
+
+1. **Verify the nested logical name**: The name used in `{% include "partials/output_format" %}` must exactly match the logical name (extensionless, with forward slashes)
+   - Check file structure: Is it `.gai/templates/partials/output_format.j2`?
+   - Verify no extra subdirectories or typos in the path
+
+2. **Check extension mismatch**: If you have `output_format.j2.md` but reference `output_format.j2`, specify the correct extension or use extensionless names
+
+3. **Ensure nested template is in the catalog**: Run `gai template list` to verify the nested template appears in the catalog
+
+4. **Look for ambiguity**: If the nested template name is ambiguous in the same tier, you'll get an ambiguity error instead—use a more specific path
+
+5. **Remember literal templates can't include from catalog**: If you're using `system-instruction` or `user-instruction` (not `*-instruction-template`), nested includes won't work because literal templates don't use the catalog
 
 ### Path Resolution Issues
 
@@ -583,20 +761,6 @@ Both commands adhere to these principles:
 4. **Reusable catalog**: The catalog built for listing/browsing is identical to the one used for resolution
 
 This ensures that what users see in listing/browsing commands matches exactly how resolution works, maintaining a consistent mental model.
-
-### Current Status
-
-As of this writing:
-
-- ✅ Template catalog and resolution system fully implemented
-- ✅ Catalog discovery and ordering working as specified
-- ✅ `gai template render` command exists for debugging templates
-- ⏳ `gai template list` command not yet implemented
-- ⏳ `gai template browse` command not yet implemented
-
-The foundation is in place and the future commands can be added by building on the existing `template_catalog.py` and `templates.py` modules.
-
----
 
 ## References
 

@@ -1,4 +1,15 @@
-"""Template handling for gai using Jinja2."""
+"""Template handling for gai using Jinja2.
+
+This module provides template rendering functionality with support for:
+- Catalog-based template resolution using logical names
+- Named templates with tier-based precedence
+- Recursive template composition via extends/include/import
+- Strict variable checking and clear error messages
+
+Named templates support full recursive composition: templates can extend, include,
+or import other templates to any depth, and all templates share the same variable
+context and catalog-based resolver.
+"""
 
 import logging
 from typing import Any, Optional
@@ -167,6 +178,10 @@ class CatalogLoader(jinja2.BaseLoader):
     resolution system to support Obsidian-style extensionless template names in
     {% extends %}, {% include %}, and {% import %} statements.
 
+    The loader enables recursive template composition: when a template includes or
+    extends another template, the same catalog and resolution rules are used for
+    all nested references, allowing templates to be composed to any depth.
+
     The loader:
     - Calls resolve_template_name() to map logical names to template files
     - Reads template content from the resolved absolute path
@@ -256,6 +271,11 @@ def create_jinja_env_from_catalog(
     - StrictUndefined to catch missing variables
     - Block trimming for cleaner output
 
+    The environment supports recursive template composition: templates loaded
+    through this environment can extend, include, or import other templates
+    using logical names, and all such references will be resolved through the
+    same catalog using consistent tier precedence rules.
+
     Args:
         catalog: List of TemplateRecord objects for template resolution
         allowed_extensions: Tuple of recognized template extensions
@@ -280,6 +300,10 @@ def render_system_instruction(config: dict[str, Any], template_vars: dict[str, A
     This function implements the precedence rule for system instructions:
     1. If 'system-instruction-template' is set, use catalog-based rendering
     2. Otherwise, fall back to 'system-instruction' with render_template_string
+
+    Named templates support recursive composition: if a named template extends or
+    includes other templates, those nested templates are resolved using the same
+    catalog and variable context.
 
     Args:
         config: Configuration dictionary
@@ -330,6 +354,10 @@ def render_user_instruction(config: dict[str, Any], template_vars: dict[str, Any
     This function implements the precedence rule for user instructions:
     1. If 'user-instruction-template' is set, use catalog-based rendering
     2. Otherwise, fall back to 'user-instruction' with render_template_string
+
+    Named templates support recursive composition: if a named template extends or
+    includes other templates, those nested templates are resolved using the same
+    catalog and variable context.
 
     Args:
         config: Configuration dictionary

@@ -169,6 +169,7 @@ gai template browse --no-preview
 - **Organized structure**: Templates are organized in configurable directories with tier-based precedence
 - **Logical names**: Use extensionless names like `"summary"` or `"layout/base_conversation"` instead of file paths
 - **Template composition**: Use `{% extends %}`, `{% include %}`, and `{% import %}` for reusable components
+- **Recursive composition**: Templates can include/extend other templates to any depth, with full variable sharing
 - **Strict correctness**: Ambiguous template names cause errors rather than silently auto-resolving
 - **Project and user templates**: Override user-level templates with project-specific ones
 
@@ -252,7 +253,7 @@ Use logical names in:
 
 ### Template Composition
 
-Build complex prompts from reusable components:
+Build complex prompts from reusable components. Named templates support **recursive composition**: templates can include or extend other templates to any depth, and all templates in the chain share the same variable context.
 
 ```jinja2
 {# Base layout template #}
@@ -270,6 +271,20 @@ Analyze this document for {{ aspect }}:
 {% import "macros/formatting" as fmt %}
 {{ fmt.section("Results", analysis) }}
 ```
+
+All `{% extends %}`, `{% include %}`, and `{% import %}` statements use the same catalog-based resolver, following tier precedence rules. Variables passed to the top-level template are available in all nested templates.
+
+### Variable Security
+
+**Template variables are always treated as data, not code.** If a variable value contains Jinja syntax like `{{ var }}`, it will be rendered literally (not evaluated). This prevents template injection and ensures predictable behavior.
+
+Example:
+```bash
+gai template render --subject "Compare {{ doc }} with code" --doc "file.txt"
+# Output: "Compare {{ doc }} with code" (literal {{ doc }}, not "file.txt")
+```
+
+To combine variables dynamically, use template expressions within template files, not within variable values.
 
 ### Configuration Reference
 
