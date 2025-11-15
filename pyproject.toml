@@ -1,6 +1,6 @@
 [project]
 name = "gai"
-version = "0.1.9"
+version = "0.2.0"
 description = "Google Gemini prompting script with flexible CLI, templating, and configuration"
 readme = "README.md"
 requires-python = ">=3.10"
