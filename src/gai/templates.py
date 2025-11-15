@@ -97,8 +97,7 @@ def resolve_template_name(
             break
 
     logger.debug(
-        f"Resolving template name: '{logical_name}' -> base_name='{base_name}', "
-        f"required_extension={required_extension}"
+        f"Resolving template name: '{logical_name}' -> base_name='{base_name}', required_extension={required_extension}"
     )
 
     # Step 2: Determine if this is a path-specific or basename-only name
@@ -174,7 +173,9 @@ class CatalogLoader(jinja2.BaseLoader):
     - Provides proper mtime checking for Jinja's auto-reload feature
     """
 
-    def __init__(self, catalog: list[TemplateRecord], allowed_extensions: tuple[str, ...] = DEFAULT_TEMPLATE_EXTENSIONS):
+    def __init__(
+        self, catalog: list[TemplateRecord], allowed_extensions: tuple[str, ...] = DEFAULT_TEMPLATE_EXTENSIONS
+    ):
         """Initialize the loader with a template catalog.
 
         Args:
