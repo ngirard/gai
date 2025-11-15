@@ -528,10 +528,7 @@ def handle_template_list(config: dict[str, Any], parsed: argparse.Namespace) -> 
     else:
         # Table output
         # Prepare data rows
-        rows = [
-            [record.tier, record.logical_name_full, record.relative_path.as_posix()]
-            for record in records
-        ]
+        rows = [[record.tier, record.logical_name_full, record.relative_path.as_posix()] for record in records]
 
         # Calculate column widths
         header = ["TIER", "LOGICAL NAME", "RELATIVE PATH"]
@@ -596,6 +593,7 @@ def handle_template_browse(config: dict[str, Any], parsed: argparse.Namespace) -
 
     # Print only the logical name to stdout
     print(selected_record.logical_name_full)
+
 
 def _run_fzf_selection(
     records: list["TemplateRecord"],
