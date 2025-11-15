@@ -243,10 +243,10 @@ def test_invocation_without_args_shows_help():
     assert "available commands" in result.stdout.lower()
 
 
-def test_backward_compatibility_generate_config():
-    """Test that old-style --generate-config still works."""
+def test_config_defaults_subcommand():
+    """Test that 'gai config defaults' works."""
     result = subprocess.run(
-        [sys.executable, "-m", "gai", "--generate-config"],
+        [sys.executable, "-m", "gai", "config", "defaults"],
         capture_output=True,
         text=True,
     )
@@ -255,13 +255,14 @@ def test_backward_compatibility_generate_config():
     assert "temperature" in result.stdout
 
 
-def test_backward_compatibility_show_prompt():
-    """Test that old-style --show-prompt still works."""
+def test_generate_show_prompt_subcommand():
+    """Test that 'gai generate --show-prompt' works."""
     result = subprocess.run(
         [
             sys.executable,
             "-m",
             "gai",
+            "generate",
             "--show-prompt",
             "--document",
             "Test",

@@ -18,10 +18,10 @@ def test_cli_help():
     assert "available commands" in result.stdout.lower()
 
 
-def test_cli_generate_config():
-    """Test that --generate-config works."""
+def test_cli_config_defaults():
+    """Test that 'gai config defaults' works."""
     result = subprocess.run(
-        [sys.executable, "-m", "gai", "--generate-config"],
+        [sys.executable, "-m", "gai", "config", "defaults"],
         capture_output=True,
         text=True,
     )
@@ -31,7 +31,7 @@ def test_cli_generate_config():
 
 
 def test_cli_show_prompt():
-    """Test that --show-prompt works with template variables."""
+    """Test that 'gai generate --show-prompt' works with template variables."""
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
         f.write("Test document content")
         temp_path = f.name
@@ -42,6 +42,7 @@ def test_cli_show_prompt():
                 sys.executable,
                 "-m",
                 "gai",
+                "generate",
                 "--show-prompt",
                 "--document",
                 f"@:{temp_path}",
@@ -61,7 +62,7 @@ def test_cli_show_prompt():
 def test_cli_invalid_temperature():
     """Test that invalid temperature raises proper error."""
     result = subprocess.run(
-        [sys.executable, "-m", "gai", "--conf-temperature", "not-a-number", "--show-prompt"],
+        [sys.executable, "-m", "gai", "generate", "--conf-temperature", "not-a-number", "--show-prompt"],
         capture_output=True,
         text=True,
     )
@@ -87,6 +88,7 @@ def test_cli_nonexistent_file():
             sys.executable,
             "-m",
             "gai",
+            "generate",
             "--show-prompt",
             "--document",
             "@:/nonexistent/file/path.txt",
@@ -105,5 +107,6 @@ def test_cli_unexpected_arg():
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 1
-    assert "Usage error" in result.stderr or "error" in result.stderr.lower()
+    # argparse returns exit code 2 for invalid command
+    assert result.returncode == 2
+    assert "error" in result.stderr.lower()

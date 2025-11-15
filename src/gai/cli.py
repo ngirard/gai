@@ -6,7 +6,6 @@ import os
 import subprocess
 import sys
 import textwrap
-from collections.abc import Generator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -33,112 +32,6 @@ def _repo_config_display_path() -> str:
     if repo_config_path is not None:
         return str(repo_config_path)
     return f"<git repo root>/{REPO_CONFIG_RELATIVE_PATH}"
-
-
-def usage(config: dict[str, Any]) -> None:
-    """Prints dynamic usage information including config and template parameters."""
-    script_name = os.path.basename(sys.argv[0])
-
-    parser = create_parser()
-    parser.print_help()
-
-    print("\nGlobal legacy options:")
-    print(f"  -h, --help            Show this help message and exit (same as '{script_name} --help')")
-    print("  --generate-config     Generate a default config file (TOML) to stdout and exit")
-    print("  --show-prompt         Render and print the final templated prompt to stdout and exit")
-
-    print("\nConfiguration tips:")
-    print("  • Configuration layers are detailed above; later layers override earlier ones.")
-    print("  • For string parameters like 'system-instruction' or 'user-instruction',")
-    print("    a value starting with `@:` will be interpreted as a file path.")
-
-    print("\nConfiguration Parameters (--conf-<name> value):")
-    for name, default_value in DEFAULT_CONFIG.items():
-        param_type = CONFIG_TYPES.get(name, type(default_value))
-        type_name = param_type.__name__ if param_type else "Any"
-        effective_value = config.get(name, default_value)
-        display_value = str(effective_value)
-        if len(display_value) > 50:
-            display_value = display_value[:47] + "..."
-        display_value_repr = repr(display_value).replace("{", "{{").replace("}", "}}")
-        print(f"  --conf-{name:<20} (type: {type_name}, default: {display_value_repr})")
-
-    print("\nTemplate Variables (--<name> value or --<name> @:path/to/file):")
-    print("  These variables are passed as context to the Jinja2 prompt templates.")
-    print("  Use --<name> @:path/to/file to load variable content from a file.")
-    print("  Paths can be absolute or relative.")
-
-    print("\nExamples:")
-    print(f'  {script_name} --document "Summary..." --input "What are the key findings?"')
-    print(f"  {script_name} --document @:./report.txt --conf-temperature 0.8")
-    print(f'  {script_name} --show-prompt --document @:./doc.txt --topic "AI"')
-
-    print("\nNote: Ensure GOOGLE_API_KEY environment variable is set.")
-
-
-def pair_args(args: list[str]) -> Generator[tuple[str, str], None, None]:
-    """Generator that yields (name_arg, value_arg) pairs from arguments.
-
-    Raises:
-        CliUsageError: If argument parsing fails.
-    """
-    i = 0
-    while i < len(args):
-        name_arg = args[i]
-        if not name_arg.startswith("--"):
-            raise CliUsageError(f"Internal Error: Non '--' argument passed to pair_args: '{name_arg}'")
-
-        if i + 1 >= len(args):
-            raise CliUsageError(f"Argument '{name_arg}' requires a value.")
-
-        value_arg = args[i + 1]
-        yield (name_arg, value_arg)
-        i += 2
-
-
-def process_template_values(
-    arg_pairs: Generator[tuple[str, str], None, None],
-) -> Generator[tuple[str, str], None, None]:
-    """Generator that processes template values, handling @: for file paths."""
-    for name_arg, value_arg in arg_pairs:
-        name = name_arg[2:]
-        if value_arg.startswith("@:"):
-            filepath = value_arg[2:]
-            processed_value = read_file_content(filepath)
-        else:
-            processed_value = value_arg
-        yield (name, processed_value)
-
-
-def parse_template_args(args: list[str]) -> dict[str, str]:
-    """Parses command-line arguments that are NOT --conf- or known flags.
-
-    Raises:
-        CliUsageError: If argument parsing fails.
-    """
-    template_args_list: list[str] = []
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        if arg.startswith("--conf-"):
-            i += 2
-        elif arg in ["--debug", "-h", "--help", "--generate-config", "--show-prompt"]:
-            i += 1
-        elif arg.startswith("--"):
-            if i + 1 >= len(args):
-                raise CliUsageError(f"Template argument '{arg}' requires a value.")
-            template_args_list.append(arg)
-            template_args_list.append(args[i + 1])
-            logger.debug(f"Identified template arg: {arg} {args[i + 1]}")
-            i += 2
-        else:
-            raise CliUsageError(f"Unexpected argument '{arg}'. Arguments must start with '--'.")
-
-    arg_pairs_generator = pair_args(template_args_list)
-    processed_pairs_generator = process_template_values(arg_pairs_generator)
-    template_variables = dict(processed_pairs_generator)
-    logger.debug(f"Template Variables: {template_variables}")
-    return template_variables
 
 
 def show_rendered_prompt(

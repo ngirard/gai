@@ -359,17 +359,6 @@ See the comprehensive [Template System Documentation](docs/templates.md) for:
 - Troubleshooting guide
 - Future CLI commands (`gai template list`, `gai template browse`)
 
-### Backward Compatibility
-
-All legacy command-line invocations continue to work:
-
-```sh
-# Legacy style (still supported)
-gai --document @:./report.md --topic "Chicken" --conf-temperature 0.8
-gai --show-prompt --document @:./report.md
-gai --generate-config > ~/.config/gai/config.toml
-```
-
 ### Development Commands
 ```sh
 # Setup development environment
@@ -433,7 +422,7 @@ gai/
 
 1. **Multi-level CLI with subcommands**:
     - **Problem**: A flat CLI with many flags becomes hard to discover and organize as features grow.
-    - **Solution**: Restructured the CLI into logical subcommands (`generate`, `config`, `template`) that mirror the codebase structure. Uses argparse for robust subcommand parsing while maintaining full backward compatibility with the legacy flat options style.
+    - **Solution**: Restructured the CLI into logical subcommands (`generate`, `config`, `template`) that mirror the codebase structure. Uses argparse for robust subcommand parsing.
     - **Design principles**:
         - Verb-noun structure (e.g., `config view`, `template render`)
         - Subcommands reflect code modules (`config.py` → `config` subcommand)

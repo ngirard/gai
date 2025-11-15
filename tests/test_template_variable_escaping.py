@@ -5,6 +5,7 @@ By default, these should be rendered as literal text (not recursively evaluated)
 """
 
 import pathlib
+
 import pytest
 
 from gai.templates import render_user_instruction

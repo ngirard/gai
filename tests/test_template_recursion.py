@@ -5,10 +5,11 @@ each other, and that variables are properly expanded across all nesting levels.
 """
 
 import pathlib
+
 import pytest
 
-from gai.templates import render_system_instruction, render_user_instruction
 from gai.exceptions import TemplateError, TemplateNotFoundError
+from gai.templates import render_system_instruction, render_user_instruction
 
 
 @pytest.fixture
@@ -213,7 +214,7 @@ def test_missing_variable_in_nested_template(template_fixtures: dict[str, pathli
         "role": "assistant",
         "subject": "test",
         "context_var": "value",
-        # important_var is missing
+        # important_var is missing  # noqa: ERA001
     }
 
     with pytest.raises(TemplateError) as exc_info:
