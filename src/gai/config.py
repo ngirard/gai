@@ -193,6 +193,15 @@ def _convert_config_values(
                     converted_value = bool(value)
                 else:
                     raise ValueError(f"Cannot convert type {type(value).__name__} to bool for '{name}'")
+            elif expected_type == list:
+                # For list types, if value is a string, wrap it in a list
+                # This handles CLI arguments like --conf-project-template-paths /path/to/dir
+                if isinstance(value, str):
+                    converted_value = [value]
+                elif isinstance(value, list):
+                    converted_value = value
+                else:
+                    raise ValueError(f"Cannot convert type {type(value).__name__} to list for '{name}'")
             else:
                 converted_value = expected_type(value)
 

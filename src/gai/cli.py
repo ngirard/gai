@@ -8,7 +8,10 @@ import sys
 import textwrap
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from .template_catalog import TemplateRecord
 
 from .config import (
     CONFIG_FILE_DIR,
@@ -268,6 +271,53 @@ def create_parser() -> argparse.ArgumentParser:
     # Add config and template args to render_parser
     _add_config_and_template_args(render_parser)
 
+    # template list
+    list_parser = template_subparsers.add_parser(
+        "list",
+        help="List discovered templates in catalog order",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    list_parser.add_argument(
+        "--tier",
+        choices=["project", "user", "builtin"],
+        help="Filter templates by tier",
+    )
+    list_parser.add_argument(
+        "--filter",
+        metavar="SUBSTRING",
+        help="Filter templates whose logical name contains this substring",
+    )
+    list_parser.add_argument(
+        "--format",
+        choices=["table", "json"],
+        default="table",
+        help="Output format (default: table)",
+    )
+    _add_config_and_template_args(list_parser)
+
+    # template browse
+    browse_parser = template_subparsers.add_parser(
+        "browse",
+        help="Interactively browse templates and select one (preview enabled by default)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    browse_parser.add_argument(
+        "--tier",
+        choices=["project", "user", "builtin"],
+        help="Filter templates by tier before browsing",
+    )
+    browse_parser.add_argument(
+        "--filter",
+        metavar="SUBSTRING",
+        help="Filter templates whose logical name contains this substring before browsing",
+    )
+    browse_parser.add_argument(
+        "--no-preview",
+        action="store_true",
+        help="Disable preview pane (preview is enabled by default)",
+    )
+    _add_config_and_template_args(browse_parser)
+
     return parser
 
 
@@ -420,3 +470,204 @@ def handle_config_path() -> None:
     else:
         print(f"Repository configuration file path: <git repo root>/{REPO_CONFIG_RELATIVE_PATH}")
         print("Status: not available outside a Git repository")
+
+
+# ===== Template subcommand handlers =====
+
+
+def handle_template_list(config: dict[str, Any], parsed: argparse.Namespace) -> None:
+    """Handle the 'gai template list' command.
+
+    Lists all discovered templates with optional filtering by tier and substring.
+    Supports both human-readable table format and JSON output.
+
+    Args:
+        config: Effective configuration dictionary
+        parsed: Parsed command-line arguments
+    """
+    import json
+
+    from .template_catalog import build_template_catalog
+
+    # Build catalog from configuration
+    catalog = build_template_catalog(config)
+    records = list(catalog.records)
+
+    # Apply tier filter if specified
+    if hasattr(parsed, "tier") and parsed.tier:
+        records = [r for r in records if r.tier == parsed.tier]
+
+    # Apply substring filter if specified
+    if hasattr(parsed, "filter") and parsed.filter:
+        substring = parsed.filter
+        records = [r for r in records if substring in r.logical_name_full]
+
+    # Handle empty results
+    if not records:
+        if parsed.format == "json":
+            print("[]")
+        else:
+            print("No templates found. Check your template paths in configuration.")
+        return
+
+    # Output based on format
+    if parsed.format == "json":
+        # JSON output
+        output_data = [
+            {
+                "logical_name": record.logical_name_full,
+                "tier": record.tier,
+                "relative_path": record.relative_path.as_posix(),
+                "absolute_path": str(record.absolute_path),
+                "root_index": record.root_index,
+                "extension": record.extension,
+            }
+            for record in records
+        ]
+        print(json.dumps(output_data, indent=2))
+    else:
+        # Table output
+        # Prepare data rows
+        rows = [
+            [record.tier, record.logical_name_full, record.relative_path.as_posix()]
+            for record in records
+        ]
+
+        # Calculate column widths
+        header = ["TIER", "LOGICAL NAME", "RELATIVE PATH"]
+        col_widths = [len(h) for h in header]
+        for row in rows:
+            for i, cell in enumerate(row):
+                col_widths[i] = max(col_widths[i], len(str(cell)))
+
+        # Format and print header
+        header_line = "  ".join(h.ljust(col_widths[i]) for i, h in enumerate(header))
+        print(header_line)
+
+        # Print rows
+        for row in rows:
+            row_line = "  ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
+            print(row_line)
+
+
+def handle_template_browse(config: dict[str, Any], parsed: argparse.Namespace) -> None:
+    """Handle the 'gai template browse' command.
+
+    Provides an interactive browsing interface using fzf to select a template.
+    Prints only the selected logical name to stdout, suitable for shell substitution.
+
+    Args:
+        config: Effective configuration dictionary
+        parsed: Parsed command-line arguments
+    """
+    import shutil
+
+    from .template_catalog import build_template_catalog
+
+    # Build catalog from configuration
+    catalog = build_template_catalog(config)
+    records = list(catalog.records)
+
+    # Apply tier filter if specified
+    if hasattr(parsed, "tier") and parsed.tier:
+        records = [r for r in records if r.tier == parsed.tier]
+
+    # Apply substring filter if specified
+    if hasattr(parsed, "filter") and parsed.filter:
+        substring = parsed.filter
+        records = [r for r in records if substring in r.logical_name_full]
+
+    # Handle empty results
+    if not records:
+        print("No templates available to browse after applying filters.", file=sys.stderr)
+        sys.exit(1)
+
+    # Check if fzf is available
+    if not shutil.which("fzf"):
+        print("Error: 'fzf' command not found. Please install fzf to use 'gai template browse'.", file=sys.stderr)
+        sys.exit(1)
+
+    # Run fzf selection
+    selected_record = _run_fzf_selection(records, preview_enabled=not parsed.no_preview)
+
+    if selected_record is None:
+        # User cancelled or error occurred
+        sys.exit(1)
+
+    # Print only the logical name to stdout
+    print(selected_record.logical_name_full)
+
+def _run_fzf_selection(
+    records: list["TemplateRecord"],
+    *,
+    preview_enabled: bool,
+) -> Optional["TemplateRecord"]:
+    """Run fzf to select a template from the list.
+
+    Args:
+        records: List of TemplateRecord objects to choose from
+        preview_enabled: Whether to show preview pane
+
+    Returns:
+        Selected TemplateRecord or None if cancelled/error
+    """
+
+    # Build input lines for fzf - use tab-separated format
+    # Format: logical_name\ttier\trelative_path\tabsolute_path
+    lines = []
+    line_to_record: dict[str, TemplateRecord] = {}
+
+    for record in records:
+        line = "\t".join(
+            [
+                record.logical_name_full,
+                record.tier,
+                record.relative_path.as_posix(),
+                str(record.absolute_path),
+            ]
+        )
+        lines.append(line)
+        line_to_record[line] = record
+
+    input_text = "\n".join(lines)
+
+    # Build fzf command
+    fzf_args = [
+        "fzf",
+        "--delimiter",
+        "\t",
+        "--with-nth",
+        "1,2,3",  # Show first three columns (logical_name, tier, relative_path)
+    ]
+
+    if preview_enabled:
+        # Use the 4th field (absolute_path) for preview
+        fzf_args.extend(
+            [
+                "--preview",
+                "cat {4}",
+                "--preview-window",
+                "right:60%:wrap",
+            ]
+        )
+
+    # Run fzf
+    try:
+        result = subprocess.run(  # noqa: S603
+            fzf_args,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode == 0:
+            # Selection made - parse the output line
+            selected_line = result.stdout.strip()
+            return line_to_record.get(selected_line)
+        # Non-zero exit code means cancelled or error
+        return None
+
+    except Exception as e:
+        print(f"Error running fzf: {e}", file=sys.stderr)
+        return None
