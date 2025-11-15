@@ -130,6 +130,36 @@ gai template render --part user --document "Content"
 gai template render --part system --conf-system-instruction "You are helpful"
 ```
 
+#### Template Discovery (`gai template list|browse`)
+
+Discover and select templates interactively:
+
+```sh
+# List all available templates
+gai template list
+
+# List only project templates
+gai template list --tier project
+
+# Filter templates by name
+gai template list --filter summary
+
+# Output as JSON for scripting
+gai template list --format json
+
+# Interactively browse templates with preview (requires fzf)
+gai template browse
+
+# Browse and set as configuration value
+gai config set user-instruction-template "$(gai template browse)"
+
+# Browse only user templates
+gai template browse --tier user
+
+# Browse without preview pane
+gai template browse --no-preview
+```
+
 ## Template System
 
 `gai` includes a powerful template system for organizing and composing prompts using Jinja2 with Obsidian-style logical names.

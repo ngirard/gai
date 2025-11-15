@@ -12,7 +12,7 @@ This document provides comprehensive documentation for the `gai` template system
 - [Template Composition](#template-composition)
 - [Best Practices](#best-practices)
 - [Troubleshooting](#troubleshooting)
-- [Future CLI Commands](#future-cli-commands)
+- [CLI Commands for Working with Templates](#cli-commands-for-working-with-templates)
 
 ## Overview
 
@@ -468,15 +468,15 @@ If templates aren't being found:
 4. Check if inside a Git repository (affects project path resolution)
 5. Use `--debug` flag to see resolved paths
 
-## Future CLI Commands
+## CLI Commands for Working with Templates
 
-The template system is designed to support future interactive commands for browsing and selecting templates. These commands will reuse the same catalog and resolution logic described above.
+The template system provides interactive commands for browsing and selecting templates. These commands reuse the same catalog and resolution logic described above.
 
 ### `gai template list`
 
 **Purpose:** List all discovered templates in catalog order.
 
-**Planned Usage:**
+**Usage:**
 ```bash
 # List all templates
 gai template list
@@ -484,66 +484,102 @@ gai template list
 # List templates from a specific tier
 gai template list --tier project
 
-# List with full paths
-gai template list --verbose
+# Filter by substring in logical name
+gai template list --filter summarize
+
+# Output as JSON for machine consumption
+gai template list --format json
 ```
 
-**Output Format:**
+**Example Table Output:**
 ```
-project  layout/base_conversation   (.gai/templates/layout/base_conversation.j2)
-project  prompts/summarize           (.gai/templates/prompts/summarize.j2)
-user     summary                     (~/.config/gai/templates/summary.j2.md)
-user     email/formal                (~/.config/gai/templates/email/formal.j2)
+TIER     LOGICAL NAME              RELATIVE PATH
+project  layout/base_conversation  layout/base_conversation.j2
+project  prompts/summarize         prompts/summarize.j2
+user     summary                   summary.j2.md
+user     email/formal              email/formal.j2
+builtin  system/default            system/default.j2
+```
+
+**Example JSON Output:**
+```bash
+$ gai template list --format json
+[
+  {
+    "logical_name": "layout/base_conversation",
+    "tier": "project",
+    "relative_path": "layout/base_conversation.j2",
+    "absolute_path": "/full/path/.gai/templates/layout/base_conversation.j2",
+    "root_index": 0,
+    "extension": ".j2"
+  },
+  ...
+]
 ```
 
 **Key Features:**
 
 - Single source of truth: Uses the same `discover_templates()` function as resolution
 - Catalog ordering: Shows templates in the same precedence order used for resolution
-- Displays both logical names and physical paths
+- Displays both logical names and relative paths
+- JSON format for scripting and tooling integration
 - Helps users understand which template would be selected for a given name
 
 ### `gai template browse`
 
-**Purpose:** Interactively browse and select templates using `fzf` or similar fuzzy finder.
+**Purpose:** Interactively browse and select templates using `fzf` with a preview pane.
 
-**Planned Usage:**
+**Usage:**
 ```bash
-# Browse templates interactively
+# Browse templates interactively (preview enabled by default)
 gai template browse
 
 # Browse and set as user instruction template
-gai config set user-instruction-template $(gai template browse)
+gai config set user-instruction-template "$(gai template browse)"
 
-# Browse with preview pane
-gai template browse --preview
+# Browse without preview pane
+gai template browse --no-preview
+
+# Browse only project templates
+gai template browse --tier project
+
+# Filter by substring before browsing
+gai template browse --filter email
 ```
 
 **Key Features:**
 
 - Interactive selection: Uses `fzf` for fuzzy finding with keyboard navigation
-- Preview pane: Shows template content for the currently selected template
-- Returns logical name: Output is the `logical_name_full` that can be used in configuration
+- Preview enabled by default: Shows template content for the currently selected template
+- Returns logical name: Output is the `logical_name_full` that can be used in configuration or templates
 - Catalog-based: Uses the same template catalog as resolution
 - Respects precedence: Templates are shown in the same order as they would be resolved
+- Shell integration: Output only to stdout, making it easy to use in command substitution
 
-**Example Integration with fzf:**
+**Requirements:**
+
+- `fzf` must be installed and available on your PATH
+- If `fzf` is not found, the command will fail with a clear error message
+
+**Example Workflow:**
 ```bash
-# The implementation would pipe catalog entries to fzf with preview
-# User sees:
-#   - Logical name (what to use in config/templates)
-#   - Tier and physical path (for context)
-#   - Template contents (in preview pane)
-# Selected template's logical name is returned
+# Interactively select a template and configure it
+gai config set user-instruction-template "$(gai template browse)"
+
+# Browse project templates and see what's available
+gai template browse --tier project
+
+# Find a specific template by name
+gai template browse --filter summary
 ```
 
 ### Implementation Principles
 
-Both commands must adhere to these principles:
+Both commands adhere to these principles:
 
 1. **Single source of truth**: Call `discover_templates()` to build the catalog, not independent filesystem scans
 2. **Consistent ordering**: Show templates in catalog order (tier precedence → root index → relative path)
-3. **Round-tripping**: The logical name shown/returned must be exactly what resolution would accept
+3. **Round-tripping**: The logical name shown/returned is exactly what resolution would accept
 4. **Reusable catalog**: The catalog built for listing/browsing is identical to the one used for resolution
 
 This ensures that what users see in listing/browsing commands matches exactly how resolution works, maintaining a consistent mental model.
