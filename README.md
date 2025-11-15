@@ -130,6 +130,190 @@ gai template render --part user --document "Content"
 gai template render --part system --conf-system-instruction "You are helpful"
 ```
 
+## Template System
+
+`gai` includes a powerful template system for organizing and composing prompts using Jinja2 with Obsidian-style logical names.
+
+### Key Features
+
+- **Organized structure**: Templates are organized in configurable directories with tier-based precedence
+- **Logical names**: Use extensionless names like `"summary"` or `"layout/base_conversation"` instead of file paths
+- **Template composition**: Use `{% extends %}`, `{% include %}`, and `{% import %}` for reusable components
+- **Strict correctness**: Ambiguous template names cause errors rather than silently auto-resolving
+- **Project and user templates**: Override user-level templates with project-specific ones
+
+### Quick Start
+
+1. **Create template directories:**
+```sh
+# Project templates (highest precedence)
+mkdir -p .gai/templates
+
+# User templates (global defaults)
+mkdir -p ~/.config/gai/templates
+```
+
+2. **Create a template file** (`.gai/templates/prompts/summarize.j2`):
+```jinja2
+{% extends "layout/base_conversation" %}
+
+{% block task %}
+Please summarize the following document:
+
+{{ document }}
+
+Focus on key findings and conclusions.
+{% endblock %}
+```
+
+3. **Configure named templates** (`.gai/config.toml` or `~/.config/gai/config.toml`):
+```toml
+# Template root directories
+project-template-paths = [".gai/templates"]
+user-template-paths = ["~/.config/gai/templates"]
+
+# Named template references (use logical names without extensions)
+user-instruction-template = "prompts/summarize"
+system-instruction-template = "system/expert_analyst"
+```
+
+4. **Use templates:**
+```sh
+# Generate using the configured template
+gai generate --document @:report.txt --role "analyst"
+
+# Override template for one-off use
+gai generate --conf-user-instruction-template "prompts/explain" --document "complex topic"
+
+# Preview rendered template
+gai template render --document "test content"
+```
+
+### Template Tiers and Precedence
+
+Templates are organized in three tiers with precedence order:
+
+1. **`project`** (highest): `.gai/templates` in your repository
+2. **`user`** (medium): `~/.config/gai/templates` for personal defaults
+3. **`builtin`** (lowest): Templates shipped with `gai`
+
+When resolving a template name like `"summary"`:
+- Search project tier first
+- If not found, search user tier
+- If not found, search builtin tier
+- If multiple matches in the same tier: **error** (ambiguity must be resolved)
+
+### Logical Names vs Physical Files
+
+Templates are referenced by **logical names** (extensionless):
+
+```
+Physical file:    .gai/templates/layout/base_conversation.j2
+Logical name:     layout/base_conversation
+
+Physical file:    .gai/templates/summary.j2
+Logical name:     summary
+```
+
+Use logical names in:
+- Configuration: `user-instruction-template = "prompts/summarize"`
+- Template tags: `{% extends "layout/base_conversation" %}`
+- CLI overrides: `--conf-user-instruction-template "prompts/analyze"`
+
+### Template Composition
+
+Build complex prompts from reusable components:
+
+```jinja2
+{# Base layout template #}
+{% extends "layout/base_conversation" %}
+
+{% block task %}
+Analyze this document for {{ aspect }}:
+{{ document }}
+{% endblock %}
+
+{# Include reusable snippets #}
+{% include "partials/output_format" %}
+
+{# Import and use macros #}
+{% import "macros/formatting" as fmt %}
+{{ fmt.section("Results", analysis) }}
+```
+
+### Configuration Reference
+
+```toml
+# Template root directories (list of paths)
+project-template-paths = [".gai/templates"]        # Project-specific
+user-template-paths = ["~/.config/gai/templates"]  # User defaults
+builtin-template-paths = []                        # Built-in (optional)
+
+# Named template references (logical names without extensions)
+system-instruction-template = "system/expert"      # Use named template
+user-instruction-template = "prompts/summarize"    # Use named template
+
+# Legacy literal templates (lower precedence - only used if *-template not set)
+system-instruction = "You are an expert."          # Literal string
+user-instruction = "Summarize: {{ document }}"     # Literal string
+```
+
+### Precedence Rules
+
+For system and user instructions:
+
+1. If `*-instruction-template` is set → Use named template from catalog
+2. Otherwise → Fall back to `*-instruction` (literal string or `@:file`)
+
+This ensures named templates take precedence when both are configured.
+
+### Avoiding Ambiguity
+
+The template system enforces strict resolution to avoid surprises:
+
+**✅ Good - Unique names:**
+```
+.gai/templates/
+  ├── summarize.j2
+  └── analyze.j2
+```
+
+**⚠️ Risky - Same basename (requires path-specific names):**
+```
+.gai/templates/
+  ├── summary.j2          # Resolve as "summary"
+  └── email/
+      └── summary.j2       # Resolve as "email/summary"
+```
+
+**❌ Error - Multiple extensions for same base name:**
+```
+.gai/templates/
+  ├── summary.j2          # Ambiguous!
+  └── summary.j2.md       # Ambiguous!
+```
+
+Use either explicit extensions (`"summary.j2"`) or keep only one file.
+
+### Best Practices
+
+- **Organize by purpose**: Use subdirectories like `layout/`, `prompts/`, `partials/`, `macros/`
+- **Use descriptive names**: `analyze_financial_report.j2` instead of `report.j2`
+- **Document variables**: Add comments explaining required template variables
+- **Provide defaults**: Use `{{ var | default("value") }}` for optional variables
+- **Commit templates**: Add `.gai/templates/` to version control
+- **Override strategically**: Keep generic templates in user tier, project-specific in project tier
+
+### For More Information
+
+See the comprehensive [Template System Documentation](docs/templates.md) for:
+
+- Detailed configuration options
+- Template composition examples
+- Resolution algorithm details
+- Troubleshooting guide
+- Future CLI commands (`gai template list`, `gai template browse`)
+
 ### Backward Compatibility
 
 All legacy command-line invocations continue to work:
