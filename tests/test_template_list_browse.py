@@ -154,6 +154,51 @@ class TestHandleTemplateList:
         assert "email" in captured.out
         assert "summary" not in captured.out
 
+    def test_list_json_format_empty(self, capsys):
+        """Test listing with no templates in JSON format returns empty array."""
+        config = DEFAULT_CONFIG.copy()
+        parsed = mock.Mock()
+        parsed.tier = None
+        parsed.filter = None
+        parsed.format = "json"
+
+        handle_template_list(config, parsed)
+
+        captured = capsys.readouterr()
+        output = json.loads(captured.out)
+        assert output == []
+
+    def test_list_combined_filters(self, tmp_path, capsys):
+        """Test combining tier and substring filters."""
+        # Create test templates in multiple tiers
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        (project_dir / "email.j2").write_text("{{ email }}")
+        (project_dir / "summary.j2").write_text("{{ summary }}")
+
+        user_dir = tmp_path / "user"
+        user_dir.mkdir()
+        (user_dir / "email_user.j2").write_text("{{ email }}")
+
+        config = DEFAULT_CONFIG.copy()
+        config["project-template-paths"] = [str(project_dir)]
+        config["user-template-paths"] = [str(user_dir)]
+
+        parsed = mock.Mock()
+        parsed.tier = "project"
+        parsed.filter = "email"
+        parsed.format = "table"
+
+        handle_template_list(config, parsed)
+
+        captured = capsys.readouterr()
+        assert "email" in captured.out
+        assert "project" in captured.out
+        # Should not show summary (filtered by substring)
+        assert "summary" not in captured.out
+        # Should not show email_user (filtered by tier)
+        assert "email_user" not in captured.out
+
 
 class TestHandleTemplateBrowse:
     """Tests for handle_template_browse function."""
@@ -283,3 +328,44 @@ class TestHandleTemplateBrowse:
         call_args = mock_run.call_args
         fzf_args = call_args[0][0]
         assert "--preview" not in fzf_args
+
+    @mock.patch("shutil.which")
+    @mock.patch("subprocess.run")
+    def test_browse_with_tier_filter(self, mock_run, mock_which, tmp_path, capsys):
+        """Test browse with tier filtering."""
+        mock_which.return_value = "/usr/bin/fzf"
+
+        # Create templates in multiple tiers
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        proj_file = project_dir / "proj.j2"
+        proj_file.write_text("{{ proj }}")
+
+        user_dir = tmp_path / "user"
+        user_dir.mkdir()
+        user_file = user_dir / "user.j2"
+        user_file.write_text("{{ user }}")
+
+        config = DEFAULT_CONFIG.copy()
+        config["project-template-paths"] = [str(project_dir)]
+        config["user-template-paths"] = [str(user_dir)]
+
+        parsed = mock.Mock()
+        parsed.tier = "project"
+        parsed.filter = None
+        parsed.no_preview = False
+
+        # Mock fzf returning the selection
+        expected_line = f"proj\tproject\tproj.j2\t{proj_file}"
+        mock_run.return_value = mock.Mock(returncode=0, stdout=expected_line + "\n")
+
+        handle_template_browse(config, parsed)
+
+        captured = capsys.readouterr()
+        assert captured.out.strip() == "proj"
+
+        # Verify only project templates were passed to fzf
+        call_args = mock_run.call_args
+        input_data = call_args[1]["input"]
+        assert "proj" in input_data
+        assert "user" not in input_data
