@@ -333,13 +333,17 @@ def render_system_instruction(config: dict[str, Any], template_vars: dict[str, A
         env = create_jinja_env_from_catalog(catalog)
 
         try:
-            # Load and render the named template
             template = env.get_template(template_name)
             rendered = template.render(template_vars)
             logger.debug(f"Successfully rendered system instruction from template '{template_name}'")
             return rendered
         except jinja2.TemplateNotFound as e:
-            raise TemplateNotFoundError(template_name, []) from e
+            # If the underlying cause is one of our richer errors, re-raise it.
+            cause = e.__cause__
+            if isinstance(cause, (TemplateNotFoundError, TemplateAmbiguityError)):
+                raise cause from e
+            # Fallback: surface a generic template error with Jinja's message.
+            raise TemplateError(f"Error rendering system instruction template '{template_name}': {e}") from e
         except jinja2.exceptions.TemplateError as e:
             raise TemplateError(f"Error rendering system instruction template '{template_name}': {e}") from e
 
@@ -387,13 +391,15 @@ def render_user_instruction(config: dict[str, Any], template_vars: dict[str, Any
         env = create_jinja_env_from_catalog(catalog)
 
         try:
-            # Load and render the named template
             template = env.get_template(template_name)
             rendered = template.render(template_vars)
             logger.debug(f"Successfully rendered user instruction from template '{template_name}'")
             return rendered
         except jinja2.TemplateNotFound as e:
-            raise TemplateNotFoundError(template_name, []) from e
+            cause = e.__cause__
+            if isinstance(cause, (TemplateNotFoundError, TemplateAmbiguityError)):
+                raise cause from e
+            raise TemplateError(f"Error rendering user instruction template '{template_name}': {e}") from e
         except jinja2.exceptions.TemplateError as e:
             raise TemplateError(f"Error rendering user instruction template '{template_name}': {e}") from e
 
