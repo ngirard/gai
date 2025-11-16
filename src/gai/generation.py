@@ -4,7 +4,8 @@ import logging
 import os
 import sys
 from collections.abc import Generator
-from typing import Any
+from pathlib import Path
+from typing import Any, Optional
 
 from google import genai
 from google.genai import types
@@ -105,7 +106,50 @@ def stream_output(stream_generator: Generator[types.GenerateContentResponse, Non
         raise GenerationError(f"Error during streaming output: {e}") from e
 
 
-def generate(config: dict[str, Any], template_variables: dict[str, str]) -> None:
+def collect_output(stream_generator: Generator[types.GenerateContentResponse, None, None]) -> str:
+    """Collect the entire streamed output into a single string."""
+
+    parts: list[str] = []
+    for chunk in stream_generator:
+        if chunk.text:
+            parts.append(chunk.text)
+    return "".join(parts)
+
+
+def extract_between_tags(text: str, tag_name: str) -> str:
+    """Extract the substring between <TAG> and </TAG> from text."""
+
+    start_tag = f"<{tag_name}>"
+    end_tag = f"</{tag_name}>"
+
+    start_index = text.find(start_tag)
+    if start_index == -1:
+        raise GenerationError(f"Tag '{start_tag}' not found in generation output.")
+
+    start_index += len(start_tag)
+    end_index = text.find(end_tag, start_index)
+    if end_index == -1:
+        raise GenerationError(f"Closing tag '{end_tag}' not found in generation output.")
+
+    return text[start_index:end_index]
+
+
+def _emit_captured_output(captured_text: str, output_file: Optional[str]) -> None:
+    if output_file:
+        Path(output_file).write_text(captured_text, encoding="utf-8")
+        logger.info("Captured output written to %s", output_file)
+    else:
+        end = "" if captured_text.endswith("\n") else "\n"
+        print(captured_text, end=end)
+
+
+def generate(
+    config: dict[str, Any],
+    template_variables: dict[str, str],
+    *,
+    capture_tag: Optional[str] = None,
+    output_file: Optional[str] = None,
+) -> None:
     """
     Orchestrates the generation process: prepares prompt, prepares config,
     executes API call, and streams output.
@@ -132,7 +176,12 @@ def generate(config: dict[str, Any], template_variables: dict[str, str]) -> None
 
     try:
         stream_generator = execute_generation_stream(client, model_name, contents, generate_config_dict)
-        stream_output(stream_generator)
+        if capture_tag:
+            full_text = collect_output(stream_generator)
+            captured = extract_between_tags(full_text, capture_tag)
+            _emit_captured_output(captured, output_file)
+        else:
+            stream_output(stream_generator)
     except GenerationError:
         raise
     except Exception as e:

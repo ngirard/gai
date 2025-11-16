@@ -646,6 +646,25 @@ If templates aren't being found:
 4. Check if inside a Git repository (affects project path resolution)
 5. Use `--debug` flag to see resolved paths
 
+## I/O/C/M conventions and structured outputs
+
+`gai` adopts a lightweight naming scheme so template authors can describe the intent of every variable without maintaining a separate schema file:
+
+- **Inputs (`I_*`)** – Primary payload variables such as `I_document` or `I_topic`.
+- **Controls (`C_*`)** – Knobs and stylistic levers like `C_style` or `C_format`.
+- **Mechanisms (`M_*`)** – Supporting context such as `M_model` or `M_temperature`.
+- **Outputs (`O_*`)** – Tag names that wrap the interesting parts of the response, e.g. `<O_main>...</O_main>`.
+
+When you run `gai generate --document foo.md`, the CLI still provides the raw `document` variable, but it also injects `I_document` and `C_document` automatically so templates can opt-in to the convention incrementally. The `gai template inspect <logical_name>` command uses Jinja's `meta` API plus tag scanning to infer which variables a template references and which `<O_*>` tags it emits. You can browse a high-level summary inline by running `gai template list --interface`.
+
+On the output side, the generator can now extract a single tagged channel without manual `awk` incantations:
+
+```bash
+gai generate --capture-tag O_main --output-file summary.md --document @:report.md
+```
+
+`--capture-tag` buffers the streaming response, finds the first `<O_main>...</O_main>` block, and either prints it or writes it to `--output-file`. This makes it easy to build shell pipelines that consume only the structured portion of a longer reply.
+
 ## CLI Commands for Working with Templates
 
 The template system provides interactive commands for browsing and selecting templates. These commands reuse the same catalog and resolution logic described above.
@@ -667,6 +686,9 @@ gai template list --filter summarize
 
 # Output as JSON for machine consumption
 gai template list --format json
+
+# Include inferred interfaces
+gai template list --interface
 ```
 
 **Example Table Output:**
@@ -702,6 +724,7 @@ $ gai template list --format json
 - Displays both logical names and relative paths
 - JSON format for scripting and tooling integration
 - Helps users understand which template would be selected for a given name
+- Optional `--interface` flag runs the interface inspector and adds I/O/C/M/outputs to the listing
 
 ### `gai template browse`
 
@@ -750,6 +773,44 @@ gai template browse --tier project
 # Find a specific template by name
 gai template browse --filter summary
 ```
+
+### `gai template inspect`
+
+**Purpose:** Reveal the inferred inputs, controls, mechanisms, and outputs for a single template.
+
+**Usage:**
+```bash
+gai template inspect prompts/summarize
+```
+
+**Key Features:**
+
+- Uses the same catalog and strict resolution rules as rendering commands
+- Runs Jinja's meta analysis to list undeclared `I_*`, `C_*`, and `M_*` variables
+- Scans the template source for `<O_*>` tags so you know which outputs exist
+- Prints CLI flag hints for every input/control (`I_document → --document`)
+
+**Sample Output:**
+```
+Template: prompts/summarize
+
+Inputs (I_*, available via CLI flags):
+  I_document  (CLI: --document)
+
+Controls (C_*, available via CLI flags):
+  C_style  (CLI: --style)
+
+Mechanisms (M_*):
+  M_model
+
+Outputs (O_* tags):
+  O_main
+
+Other variables:
+  helper_block
+```
+
+Use this command to learn what to pass before running `gai generate`, to audit template design, or to decide which tag to capture with `gai generate --capture-tag`.
 
 ### Implementation Principles
 
