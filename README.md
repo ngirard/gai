@@ -91,6 +91,9 @@ gai generate --show-prompt --document @:./file.txt
 
 # Override config parameters
 gai generate --conf-temperature 0.8 --conf-model gemini-pro --document "Text"
+
+# Capture only the content inside <O_main>...</O_main> and write to a file
+gai generate --capture-tag O_main --output-file summary.md --document @:./report.md
 ```
 
 #### Configuration Management (`gai config`)
@@ -128,6 +131,10 @@ gai template render --part user --document "Content"
 
 # Render only system instruction
 gai template render --part system --conf-system-instruction "You are helpful"
+
+# Use positional template name or -t/--template shortcut
+gai template render prompts/summarize --document @:./file.txt
+gai template render -t prompts/summarize --document @:./file.txt
 ```
 
 #### Template Discovery (`gai template list|browse`)
@@ -147,6 +154,9 @@ gai template list --filter summary
 # Output as JSON for scripting
 gai template list --format json
 
+# Include inferred inputs/outputs/controls in listings
+gai template list --interface
+
 # Interactively browse templates with preview (requires fzf)
 gai template browse
 
@@ -158,6 +168,9 @@ gai template browse --tier user
 
 # Browse without preview pane
 gai template browse --no-preview
+
+# Inspect the I/O/C/M interface of a template
+gai template inspect prompts/summarize
 ```
 
 ## Template System
@@ -172,6 +185,7 @@ gai template browse --no-preview
 - **Recursive composition**: Templates can include/extend other templates to any depth, with full variable sharing
 - **Strict correctness**: Ambiguous template names cause errors rather than silently auto-resolving
 - **Project and user templates**: Override user-level templates with project-specific ones
+- **Discoverable interfaces**: Use `gai template inspect` or `gai template list --interface` to see each template's inputs, controls, mechanisms, and outputs
 
 ### Quick Start
 
@@ -207,6 +221,17 @@ user-template-paths = ["~/.config/gai/templates"]
 user-instruction-template = "prompts/summarize"
 system-instruction-template = "system/expert_analyst"
 ```
+
+### I/O/C/M naming convention
+
+To make template expectations explicit, `gai` uses a lightweight prefix convention inspired by IDEF0:
+
+- **Inputs (`I_`)**: Payload data fed into the LLM, e.g. `I_document` or `I_topic`.
+- **Controls (`C_`)**: Knobs that shape behavior, e.g. `C_style` or `C_audience`.
+- **Mechanisms (`M_`)**: Supporting resources such as `M_model` or `M_temperature`.
+- **Outputs (`O_`)**: Response channels emitted inside tags, e.g. `<O_main>...</O_main>`.
+
+When you pass CLI variables such as `--document foo.md`, the tool automatically makes them available as `document`, `I_document`, and `C_document` so templates can adopt the convention incrementally. The `gai template inspect <logical_name>` command reads the template source, infers undeclared variables via Jinja's meta API, and lists all inputs/controls/mechanisms plus any `<O_*>` tags it finds. Pair this with `gai generate --capture-tag O_main` to grab just the structured output block without extra shell scripting.
 
 4. **Use templates:**
 ```sh

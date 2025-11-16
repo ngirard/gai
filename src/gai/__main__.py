@@ -11,6 +11,7 @@ from .cli import (
     handle_config_validate,
     handle_config_view,
     handle_template_browse,
+    handle_template_inspect,
     handle_template_list,
     parse_args_for_new_cli,
     show_rendered_prompt,
@@ -18,6 +19,21 @@ from .cli import (
 from .config import CONFIG_FILE_DIR, load_effective_config
 from .exceptions import CliUsageError, ConfigError, GaiError, GenerationError, TemplateError
 from .generation import generate
+
+
+def _has_cli_override(args_list: list[str], name: str) -> bool:
+    flag = f"--conf-{name}"
+    return flag in args_list
+
+
+def _apply_user_template_override(args_list: list[str], template_name: str | None) -> list[str]:
+    if not template_name:
+        return args_list
+
+    if _has_cli_override(args_list, "user-instruction-template"):
+        return args_list
+
+    return [*args_list, "--conf-user-instruction-template", template_name]
 
 
 def _handle_new_cli(args_list: list[str]) -> None:
@@ -69,8 +85,10 @@ def _handle_new_cli(args_list: list[str]) -> None:
     elif parsed.command == "template":
         # Template subcommands
         if parsed.template_command == "render":
+            template_override = getattr(parsed, "template", None) or getattr(parsed, "template_name", None)
+            config_args = _apply_user_template_override(args_list, template_override)
             # Load config
-            effective_config = load_effective_config(args_list)
+            effective_config = load_effective_config(config_args)
 
             # Determine which part to render
             part = None
@@ -90,6 +108,9 @@ def _handle_new_cli(args_list: list[str]) -> None:
             # Load config and handle template browse
             effective_config = load_effective_config(args_list)
             handle_template_browse(effective_config, parsed)
+        elif parsed.template_command == "inspect":
+            effective_config = load_effective_config(args_list)
+            handle_template_inspect(effective_config, parsed)
         else:
             # No subcommand provided for template
             parser.parse_args(["template", "-h"])
@@ -98,10 +119,18 @@ def _handle_new_cli(args_list: list[str]) -> None:
         # Generate command
         effective_config = load_effective_config(args_list)
 
+        if parsed.output_file and not parsed.capture_tag:
+            raise CliUsageError("--output-file requires --capture-tag")
+
         if parsed.show_prompt:
             show_rendered_prompt(effective_config, template_vars)
         else:
-            generate(effective_config, template_vars)
+            generate(
+                effective_config,
+                template_vars,
+                capture_tag=getattr(parsed, "capture_tag", None),
+                output_file=getattr(parsed, "output_file", None),
+            )
 
     else:
         # No command provided: show top-level help and exit with error

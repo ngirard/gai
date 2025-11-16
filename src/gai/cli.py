@@ -7,7 +7,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 if TYPE_CHECKING:
     from .template_catalog import TemplateRecord
@@ -21,8 +21,9 @@ from .config import (
     get_repo_config_path,
     read_file_content,
 )
-from .exceptions import CliUsageError
-from .templates import render_system_instruction, render_user_instruction
+from .exceptions import CliUsageError, TemplateError
+from .template_interface import TemplateInterface, build_template_interface
+from .templates import create_jinja_env_from_catalog, render_system_instruction, render_user_instruction
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,16 @@ def create_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument(
         "--show-prompt", action="store_true", help="Display the rendered prompt instead of generating"
     )
+    generate_parser.add_argument(
+        "--capture-tag",
+        metavar="TAG",
+        help="Capture only the text between <TAG> and </TAG> in the streamed response",
+    )
+    generate_parser.add_argument(
+        "--output-file",
+        metavar="PATH",
+        help="Write captured output to PATH instead of stdout (requires --capture-tag)",
+    )
     _add_config_and_template_args(generate_parser)
 
     # ===== CONFIG SUBCOMMAND =====
@@ -160,6 +171,17 @@ def create_parser() -> argparse.ArgumentParser:
         default="both",
         help="Which part to render (default: both)",
     )
+    render_parser.add_argument(
+        "template_name",
+        nargs="?",
+        help="Optional user instruction template logical name (shorthand for -t/--template)",
+    )
+    render_parser.add_argument(
+        "-t",
+        "--template",
+        metavar="LOGICAL_NAME",
+        help="User instruction template logical name (shortcut for --conf-user-instruction-template)",
+    )
 
     # Add config and template args to render_parser
     _add_config_and_template_args(render_parser)
@@ -186,6 +208,11 @@ def create_parser() -> argparse.ArgumentParser:
         default="table",
         help="Output format (default: table)",
     )
+    list_parser.add_argument(
+        "--interface",
+        action="store_true",
+        help="Include inferred I/O/C/M information for each template",
+    )
     _add_config_and_template_args(list_parser)
 
     # template browse
@@ -210,6 +237,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable preview pane (preview is enabled by default)",
     )
     _add_config_and_template_args(browse_parser)
+
+    inspect_parser = template_subparsers.add_parser(
+        "inspect",
+        help="Inspect template inputs, controls, mechanisms, and outputs",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    inspect_parser.add_argument("logical_name", help="Logical template name to inspect")
+    _add_config_and_template_args(inspect_parser)
 
     return parser
 
@@ -269,6 +304,8 @@ def parse_template_args_from_list(args: list[str]) -> dict[str, str]:
                     template_vars[name] = read_file_content(filepath)
                 else:
                     template_vars[name] = value
+
+                _apply_iocm_aliases(template_vars, name, value)
                 i += 2
             else:
                 raise CliUsageError(f"Template argument '{arg}' requires a value.")
@@ -276,6 +313,19 @@ def parse_template_args_from_list(args: list[str]) -> dict[str, str]:
             raise CliUsageError(f"Unexpected argument '{arg}'. Template variables must start with '--'.")
 
     return template_vars
+
+
+def _apply_iocm_aliases(template_vars: dict[str, str], name: str, value: str) -> None:
+    """Populate implicit I_/C_ aliases for CLI-provided template variables."""
+
+    if name.startswith("I_") or name.startswith("C_"):
+        return
+
+    inferred_input = f"I_{name}"
+    inferred_control = f"C_{name}"
+
+    template_vars.setdefault(inferred_input, value)
+    template_vars.setdefault(inferred_control, value)
 
 
 # ===== Config subcommand handlers =====
@@ -403,11 +453,29 @@ def handle_template_list(config: dict[str, Any], parsed: argparse.Namespace) -> 
             print("No templates found. Check your template paths in configuration.")
         return
 
+    interface_map: dict[str, TemplateInterface] = {}
+    interface_summaries: dict[str, str] = {}
+    if parsed.interface:
+        env = create_jinja_env_from_catalog(catalog.records)
+        for record in records:
+            try:
+                interface = build_template_interface(
+                    config,
+                    record.logical_name_full,
+                    catalog=catalog.records,
+                    jinja_env=env,
+                )
+                interface_map[record.logical_name_full] = interface
+                interface_summaries[record.logical_name_full] = _summarize_interface_for_table(interface)
+            except TemplateError as exc:
+                interface_summaries[record.logical_name_full] = f"Error: {exc}"
+
     # Output based on format
     if parsed.format == "json":
         # JSON output
-        output_data = [
-            {
+        output_data = []
+        for record in records:
+            data = {
                 "logical_name": record.logical_name_full,
                 "tier": record.tier,
                 "relative_path": record.relative_path.as_posix(),
@@ -415,26 +483,40 @@ def handle_template_list(config: dict[str, Any], parsed: argparse.Namespace) -> 
                 "root_index": record.root_index,
                 "extension": record.extension,
             }
-            for record in records
-        ]
+            if parsed.interface:
+                interface = interface_map.get(record.logical_name_full)
+                if interface:
+                    data["interface"] = {
+                        "inputs": sorted(interface.inputs),
+                        "controls": sorted(interface.controls),
+                        "mechanisms": sorted(interface.mechanisms),
+                        "outputs": sorted(interface.outputs),
+                    }
+                else:
+                    data["interface"] = interface_summaries.get(record.logical_name_full)
+            output_data.append(data)
         print(json.dumps(output_data, indent=2))
     else:
         # Table output
-        # Prepare data rows
-        rows = [[record.tier, record.logical_name_full, record.relative_path.as_posix()] for record in records]
+        rows = []
+        for record in records:
+            row = [record.tier, record.logical_name_full, record.relative_path.as_posix()]
+            if parsed.interface:
+                row.append(interface_summaries.get(record.logical_name_full, "-"))
+            rows.append(row)
 
-        # Calculate column widths
         header = ["TIER", "LOGICAL NAME", "RELATIVE PATH"]
+        if parsed.interface:
+            header.append("INTERFACE")
+
         col_widths = [len(h) for h in header]
         for row in rows:
             for i, cell in enumerate(row):
                 col_widths[i] = max(col_widths[i], len(str(cell)))
 
-        # Format and print header
         header_line = "  ".join(h.ljust(col_widths[i]) for i, h in enumerate(header))
         print(header_line)
 
-        # Print rows
         for row in rows:
             row_line = "  ".join(str(cell).ljust(col_widths[i]) for i, cell in enumerate(row))
             print(row_line)
@@ -486,6 +568,68 @@ def handle_template_browse(config: dict[str, Any], parsed: argparse.Namespace) -
 
     # Print only the logical name to stdout
     print(selected_record.logical_name_full)
+
+
+def handle_template_inspect(config: dict[str, Any], parsed: argparse.Namespace) -> None:
+    """Handle the 'gai template inspect' command."""
+
+    interface = build_template_interface(config, parsed.logical_name)
+
+    print(f"Template: {interface.logical_name}\n")
+
+    _print_interface_section("Inputs (I_*, available via CLI flags)", interface.inputs)
+    _print_interface_section("Controls (C_*, available via CLI flags)", interface.controls)
+    _print_interface_section("Mechanisms (M_*)", interface.mechanisms, show_cli=False)
+    _print_outputs_section(interface.outputs)
+
+    if interface.other_variables:
+        print("Other variables:")
+        for name in sorted(interface.other_variables):
+            print(f"  {name}")
+    else:
+        print("Other variables:\n  (none)")
+
+
+def _summarize_interface_for_table(interface: TemplateInterface) -> str:
+    parts: list[str] = []
+    if interface.inputs:
+        parts.append("I:" + ", ".join(sorted(filter(None, interface.inputs.values()))))
+    if interface.controls:
+        parts.append("C:" + ", ".join(sorted(filter(None, interface.controls.values()))))
+    if interface.outputs:
+        parts.append("O:" + ", ".join(sorted(interface.outputs)))
+    if interface.mechanisms:
+        parts.append("M:" + ", ".join(sorted(interface.mechanisms)))
+    return " | ".join(parts) if parts else "-"
+
+
+def _print_interface_section(
+    title: str,
+    prefixed_variables: Mapping[str, str],
+    *,
+    show_cli: bool = True,
+) -> None:
+    print(f"{title}:")
+    if not prefixed_variables:
+        print("  (none)")
+        return
+
+    for full_name in sorted(prefixed_variables):
+        base_name = prefixed_variables[full_name]
+        if show_cli and base_name:
+            print(f"  {full_name}  (CLI: --{base_name})")
+        else:
+            print(f"  {full_name}")
+
+
+def _print_outputs_section(outputs: set[str]) -> None:
+    print("Outputs (O_* tags):")
+    if not outputs:
+        print("  (none)")
+        return
+
+    for name in sorted(outputs):
+        print(f"  {name}")
 
 
 def _run_fzf_selection(
